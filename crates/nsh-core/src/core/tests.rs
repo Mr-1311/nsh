@@ -12667,6 +12667,77 @@ mod views {
         assert_eq!(background(&batch, plain), Some(crate::Color(0x0000ffff)));
     }
 
+    /// A key a test names: the id goes on the key's root, as TSX's
+    /// `testID` on a component does.
+    #[derive(Default)]
+    struct NamedKey;
+
+    #[derive(Clone, PartialEq, Props)]
+    struct NamedKeyProps {}
+
+    impl Component for NamedKey {
+        type Props = NamedKeyProps;
+        type Event = NoEvent;
+
+        fn view(_: NamedKeyProps, _: Scope<NoEvent>) -> impl IntoElement {
+            view()
+                .flex_row()
+                .child(
+                    Key::element(KeyProps {
+                        selected: false.into(),
+                    })
+                    .test_id("save"),
+                )
+                .child(OwnId::element(OwnIdProps {}).test_id("given"))
+        }
+    }
+
+    /// A component whose root names itself.
+    #[derive(Default)]
+    struct OwnId;
+
+    #[derive(Clone, PartialEq, Props)]
+    struct OwnIdProps {}
+
+    impl Component for OwnId {
+        type Props = OwnIdProps;
+        type Event = NoEvent;
+
+        fn view(_: OwnIdProps, _: Scope<NoEvent>) -> impl IntoElement {
+            view().size_10().test_id("own")
+        }
+    }
+
+    #[test]
+    fn a_nested_components_test_id_is_on_its_root() {
+        let mut c = core();
+        c.mount_root(&Root::new::<NamedKey>(|| NamedKeyProps {}));
+        let batch = c.commit().unwrap();
+        let named: Vec<NodeId> = batch
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some("save") => {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(named.len(), 1, "{:?}", batch.items);
+        // The key's root: the view that hears presses.
+        assert!(c.component_event(named[0], EventKind::Press, &EventPayload::None));
+        // A test id given to a component is over its root's own.
+        let ids: Vec<&str> = batch
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::ViewProps { props, .. } => props.test_id.as_deref(),
+                _ => None,
+            })
+            .collect();
+        assert!(ids.contains(&"given") && !ids.contains(&"own"), "{ids:?}");
+    }
+
     /// A page whose header's colors are typed styles, theme colors among
     /// them.
     #[derive(Default)]
