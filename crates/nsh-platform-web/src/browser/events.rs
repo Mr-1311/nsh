@@ -72,10 +72,17 @@ pub(super) fn payload(host: &Bindings, payload: &EventPayload) -> Result<Value, 
             ("modifiers", modifiers(&p.modifiers)?),
             ("clickCount", number(p.clicks)),
         ])?,
-        EventPayload::Hover(p) => object([
+        EventPayload::Mouse(p) => object([
             ("position", point(p.position)?),
             ("pagePosition", point(p.page_position)?),
             ("modifiers", modifiers(&p.modifiers)?),
+            (
+                "pressedButton",
+                match p.pressed_button {
+                    Some(button) => Value::string(button.name())?,
+                    None => Value(1),
+                },
+            ),
         ])?,
         EventPayload::ContextMenu(p) => object([
             ("position", point(p.position)?),
@@ -83,6 +90,13 @@ pub(super) fn payload(host: &Bindings, payload: &EventPayload) -> Result<Value, 
             ("modifiers", modifiers(&p.modifiers)?),
         ])?,
         EventPayload::FileDrop(uris) => object([("uris", strings(uris)?)])?,
+        EventPayload::FileDropAt {
+            uris,
+            page_position,
+        } => object([
+            ("uris", strings(uris)?),
+            ("pagePosition", point(*page_position)?),
+        ])?,
         EventPayload::Paste(paste) => {
             let mut files = Vec::new();
             for file in &paste.files {
