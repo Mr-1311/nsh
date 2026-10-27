@@ -220,7 +220,7 @@ pub(super) struct RootContext {
     inset_padding: Option<crate::EdgeInsets>,
     inset_margin: Option<crate::EdgeInsets>,
     /// The test id given it (the outer wins), over the root's own.
-    test_id: Option<Option<Arc<str>>>,
+    test_id: Option<Arc<str>>,
     /// Whether any view gives it anything besides styles.
     given: bool,
 }
@@ -235,7 +235,7 @@ impl RootContext {
             attrs.inset_margin = Some(insets);
         }
         if let Some(id) = &self.test_id {
-            crate::element::host::set_in(&mut attrs.props, Prop::TestId(id.clone()));
+            crate::element::host::set_in(&mut attrs.props, Prop::TestId(Some(id.clone())));
         }
         attrs
     }
@@ -1714,10 +1714,7 @@ impl<M: TextEngine> Core<M> {
                 });
             }
             inst.root_insets_applied = insets;
-            let test_id = match &cx.test_id {
-                Some(given) => given.clone(),
-                None => test_id_of(&attrs),
-            };
+            let test_id = cx.test_id.clone().or_else(|| test_id_of(&attrs));
             if test_id != inst.root_test_id_applied {
                 let _ = self.apply_op(Op::SetProp {
                     id: host,
@@ -2268,12 +2265,7 @@ impl<M: TextEngine> Core<M> {
             decls.extend(given.animated.iter().map(|(d, _)| d.clone()));
             cx.inset_padding = given.inset_padding.or(cx.inset_padding);
             cx.inset_margin = given.inset_margin.or(cx.inset_margin);
-            if let Some(id) = given.props.iter().find_map(|p| match p {
-                Prop::TestId(id) => Some(id.clone()),
-                _ => None,
-            }) {
-                cx.test_id = Some(id);
-            }
+            cx.test_id = test_id_of(given).or(cx.test_id.take());
         };
         if let Some(given) = &inst.given {
             take(&mut cx, given);

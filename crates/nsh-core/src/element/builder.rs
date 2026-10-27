@@ -2120,10 +2120,11 @@ impl IntoElement for Children {
 /// Another component in a view ([`Component::element`]). Its styles go
 /// after the component's own, like an app's classes, and so do its inline
 /// style, animated values and insets ([`Element`]'s), on the component's
-/// root, which also takes its [`Self::test_id`] over its own; its state styles ([`Self::active`], [`Self::hover`],
-/// [`Self::focus`], [`Self::disabled_style`], [`Styled::selected`],
-/// [`Styled::checked`]) follow the states of that root, as an app's
-/// `active:` / `hover:` classes on a TSX component do. It hears and is to
+/// root, which also takes its [`Self::test_id`] over its own; its state
+/// styles ([`Self::active`], [`Self::hover`], [`Self::focus`],
+/// [`Self::disabled_style`], [`Styled::selected`], [`Styled::checked`])
+/// follow the states of that root, as an app's `active:` / `hover:`
+/// classes on a TSX component do. It hears and is to
 /// assistive technologies what the component says (its events and props):
 /// it is not [`Interactive`] or [`Accessible`]. The element a
 /// `#[component]`'s constructor makes (`button()`) wraps one

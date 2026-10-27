@@ -12692,7 +12692,8 @@ mod views {
         }
     }
 
-    /// A component whose root names itself.
+    /// A component whose root names itself; each press of it changes its
+    /// own label (an update of the root's own attributes).
     #[derive(Default)]
     struct OwnId;
 
@@ -12704,7 +12705,12 @@ mod views {
         type Event = NoEvent;
 
         fn view(_: OwnIdProps, _: Scope<NoEvent>) -> impl IntoElement {
-            view().size_10().test_id("own")
+            let presses = signal(0u32);
+            view()
+                .size_10()
+                .test_id("own")
+                .label(move || SharedString::from(format!("pressed {}", presses.get())))
+                .on_press(move || presses.update(|n| *n += 1))
         }
     }
 
@@ -12736,6 +12742,86 @@ mod views {
             })
             .collect();
         assert!(ids.contains(&"given") && !ids.contains(&"own"), "{ids:?}");
+    }
+
+    /// [`OwnId`] given `"a"`, then `"b"`, then no id: a step per press of
+    /// `next`.
+    #[derive(Default)]
+    struct Renamed;
+
+    #[derive(Clone, PartialEq, Props)]
+    struct RenamedProps {}
+
+    impl Component for Renamed {
+        type Props = RenamedProps;
+        type Event = NoEvent;
+
+        fn view(_: RenamedProps, _: Scope<NoEvent>) -> impl IntoElement {
+            let step = signal(0u8);
+            view()
+                .child(
+                    view()
+                        .size_10()
+                        .test_id("next")
+                        .on_press(move || step.update(|s| *s += 1)),
+                )
+                .child(dynamic(move || {
+                    let own = OwnId::element(OwnIdProps {});
+                    match step.get() {
+                        0 => own.test_id("a"),
+                        1 => own.test_id("b"),
+                        _ => own,
+                    }
+                }))
+        }
+    }
+
+    #[test]
+    fn a_given_test_id_stays_over_the_roots_updates_and_the_own_comes_back() {
+        let ids = |batch: &MountBatch| -> Vec<(NodeId, Option<String>)> {
+            batch
+                .items
+                .iter()
+                .filter_map(|i| match i {
+                    MountItem::ViewProps { id, props } => {
+                        Some((*id, props.test_id.as_deref().map(str::to_owned)))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let named = |sent: &[(NodeId, Option<String>)], name: &str| {
+            sent.iter()
+                .find(|(_, t)| t.as_deref() == Some(name))
+                .map(|(id, _)| *id)
+        };
+        let mut c = core();
+        c.mount_root(&Root::new::<Renamed>(|| RenamedProps {}));
+        let first = ids(&c.commit().unwrap());
+        let next = named(&first, "next").unwrap();
+        let root = named(&first, "a").expect("the id given it");
+        assert!(named(&first, "own").is_none(), "{first:?}");
+        // The root's own label changes: the label goes, and the id it was
+        // given neither goes again nor gives way to its own.
+        assert!(c.component_event(root, EventKind::Press, &EventPayload::None));
+        let batch = c.commit().unwrap();
+        assert!(
+            batch
+                .items
+                .iter()
+                .any(|i| matches!(i, MountItem::AccessibilityLabel { id, .. } if *id == root)),
+            "{:?}",
+            batch.items
+        );
+        assert_eq!(ids(&batch), [], "{:?}", batch.items);
+        // Another id given.
+        assert!(c.component_event(next, EventKind::Press, &EventPayload::None));
+        let sent = ids(&c.commit().unwrap());
+        assert!(named(&sent, "b").is_some(), "{sent:?}");
+        // None given: the root's own.
+        assert!(c.component_event(next, EventKind::Press, &EventPayload::None));
+        let sent = ids(&c.commit().unwrap());
+        assert!(named(&sent, "own").is_some(), "{sent:?}");
     }
 
     /// A page whose header's colors are typed styles, theme colors among
