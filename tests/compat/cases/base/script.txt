@@ -1363,7 +1363,9 @@ expect Y2026
 expect D9*
 prop label:2026-10-09 role button
 prop label:2026-10-09 accessibilityState selected=true
-frame label:2026-10-05 0 0 20 20
+# On a phone the calendar spans the sheet: a day is a seventh of its
+# width, the app's 20 high.
+frame label:2026-10-05 0 0 56 20
 # Weekends take no press (`disabledMatcher`).
 prop label:2026-10-10 accessibilityState disabled=true
 prop label:2026-10-11 accessibilityState disabled=true
@@ -2296,26 +2298,8 @@ expect v35
 prop id:cycle accessibilityLabel Cycle
 covers [nsh/base/plot] Sankey
 covers [props] Sankey.links
-covers [props] Sankey.nodeWidth
-covers [props] Sankey.nodePadding
-covers [props] Sankey.nodeAlign
-covers [props] Sankey.iterations
-covers [props] Sankey.valueScale
-covers [props] Sankey.minLinkWidth
-covers [props] Sankey.nodeCornerRadius
-covers [props] Sankey.nodeClass
-covers [props] Sankey.nodeStyle
-covers [props] Sankey.linkClass
-covers [props] Sankey.linkStyle
-covers [props] Sankey.linkBackgroundClass
-covers [props] Sankey.linkBackgroundStyle
-covers [props] Sankey.hoverDim
 covers [props] Sankey.nodeLabel
 covers [props] Sankey.valueLabel
-covers [props] Sankey.nodeLabelClass
-covers [props] Sankey.nodeLabelStyle
-covers [props] Sankey.valueLabelClass
-covers [props] Sankey.valueLabelStyle
 
 # The app's design tokens: shadcn's `neutral` with the app's theme over it.
 tap id:case-base-token
