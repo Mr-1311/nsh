@@ -29,7 +29,9 @@ window.ready=true;
 import {Menu} from 'nsh/desktop';
 import {InputAccessoryView} from 'nsh/mobile';
 import {Buffer} from 'buffer';
+import * as rt from 'nsh:rt';
 const result=parent.result;
+result.moduleIdentity=rt === await import('nsh:rt');
 host.on('before', value=>result.events.push(value));
 try { nextTick(null); } catch(e) { result.errorBrand=e instanceof TypeError; }
 result.functionBrand=View instanceof Function && InputAccessoryView instanceof Function;
@@ -48,6 +50,22 @@ result.runs++;
             async with async_playwright() as playwright:
                 browser = await playwright.chromium.launch(executable_path=chrome, args=["--no-sandbox"])
                 page = await browser.new_page()
+                # Model browsers that accept import maps only before module
+                # loading. This fails the old startup order even in Chromium.
+                await page.add_init_script('''(() => {
+                  let moduleStarted=false;
+                  const append=Element.prototype.append;
+                  Element.prototype.append=function(...nodes) {
+                    for(const node of nodes) {
+                      if(node instanceof HTMLScriptElement) {
+                        if(node.type==='importmap' && moduleStarted)
+                          throw new Error('import map installed after module loading');
+                        if(node.type==='module') moduleStarted=true;
+                      }
+                    }
+                    return append.apply(this,nodes);
+                  };
+                })();''')
                 await page.goto(f"http://127.0.0.1:{server.server_port}/index.html")
                 await page.wait_for_function("window.ready")
                 result = await page.evaluate('''async()=>{
@@ -69,12 +87,12 @@ result.runs++;
                   return result;
                 }''')
                 assert result["events"] == [0, 1, 2], result
-                assert all(result[k] for k in ["errorBrand", "functionBrand", "promiseBrand", "bufferBrand"]), result
+                assert all(result[k] for k in ["errorBrand", "functionBrand", "promiseBrand", "bufferBrand", "moduleIdentity"]), result
                 assert result["runs"] == 4 and result["cleaned"] == 4, result
                 assert result["failedCleaned"] == 1 and "startup failed" in result["failure"], result
                 assert result["framesAfterFailure"] == result["framesAfterStop"] == 0, result
                 assert "disposed" in result["cancelled"] and not result.get("late"), result
-                for script in ["bootstrap.js", "realm.js"]:
+                for script in ["bootstrap.classic.js", "realm.js"]:
                     await page.route(f"**/browser/{script}", lambda route: route.abort())
                     failure = await page.evaluate('''async()=>{
                       try { await player.runModule('./app.js'); return {resolved:true}; }

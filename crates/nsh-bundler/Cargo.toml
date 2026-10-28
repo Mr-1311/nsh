@@ -11,6 +11,10 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[[example]]
+name = "browser-bootstrap"
+required-features = ["bundle"]
+
 [features]
 default = ["bundle"]
 # Bundling apps (rolldown), development bundles, assets and `.nsh/types`.

@@ -63,8 +63,9 @@ export function createBrowserHost(player) {
           rejectLoad = reject;
           Object.defineProperty(realm, "__nsh_browser_bootstrap", { value: resolve, configurable: true });
           const bootstrap = doc.createElement("script");
-          bootstrap.type = "module";
-          bootstrap.src = new URL("./bootstrap.js", import.meta.url).href;
+          // A classic bundle constructs the facade without starting module
+          // loading. Firefox requires the import map before the first module.
+          bootstrap.src = new URL("./bootstrap.classic.js", import.meta.url).href;
           bootstrap.onerror = () => reject(new Error("could not load the browser facade"));
           doc.head.append(bootstrap);
         });

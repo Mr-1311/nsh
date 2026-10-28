@@ -41,6 +41,12 @@ continues to execute QuickJS: testing that host alone does not validate the brow
 
 ### Browser-host regression checks
 
+The facade bootstrap is a generated classic script so the iframe can install its
+import map before loading any ES module (required by Firefox). Its functions still
+use the app realm's intrinsics. After changing `web/browser/scope.js` or its dependencies,
+run `cargo run -p nsh-bundler --example browser-bootstrap`; CI checks that the committed
+`bootstrap.classic.js` matches those sources. Application packaging needs no extra tool.
+
 Build `cargo build -p nsh-platform-web --target wasm32-unknown-unknown --no-default-features
 --features browser-tests --profile web`, then run:
 

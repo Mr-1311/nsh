@@ -317,7 +317,9 @@ fn publish_browser_host(site: &Site, root: &Path) -> anyhow::Result<String> {
             .to_string_lossy()
             .into_owned();
         let code = fs::read_to_string(&path)?;
-        let code = if name.ends_with(".js") {
+        // The generated classic bootstrap is already minified. Parsing it
+        // as ESM can discard its strict directive (implicit only in modules).
+        let code = if name.ends_with(".js") && name != "bootstrap.classic.js" {
             nsh_bundler::minify_module(&name, &code).map_err(anyhow::Error::msg)?
         } else {
             code
@@ -879,6 +881,23 @@ fn dir_size(dir: &Path) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_classic_bootstrap_keeps_its_strict_semantics_when_packaged() {
+        let dir = std::env::temp_dir().join(format!("nsh-web-classic-{}", std::process::id()));
+        let source = dir.join("source");
+        std::fs::create_dir_all(source.join("browser")).unwrap();
+        let code = "\"use strict\";globalThis.receiver=function(){return this};";
+        std::fs::write(source.join("browser/bootstrap.classic.js"), code).unwrap();
+        let out = dir.join("site");
+        let site = super::Site::new(&out).unwrap();
+        let host = super::publish_browser_host(&site, &source).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(out.join(host).join("bootstrap.classic.js")).unwrap(),
+            code
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     use super::*;
 
     #[test]
