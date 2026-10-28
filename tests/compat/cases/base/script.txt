@@ -1020,8 +1020,11 @@ tap label:Underline text
 expect Changes: 3
 expect Marks: bold,underline
 # A disabled group disables every toggle in it: no stop of the focus.
+# The markers take `group-disabled:` (10 wide), save the pressed Bold's,
+# whose `group-aria-pressed:` comes later among Tailwind's variants and
+# wins (30 wide), as in a browser.
 tap id:lock
-frame text:Bold 18 2 31 17
+frame text:Bold 38 2 31 17
 frame text:Italic 18 2 47 17
 prop id:bold focusable false
 tap id:lock

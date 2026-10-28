@@ -110,7 +110,7 @@ tap text:Lock seats
 expect Seats: locked
 expect Unlock seats
 tap text:OtpInput
-expect Six digits: type or paste them
+expect Six digits: type or paste them; a wrong code shakes
 expect The code is 246810
 tap text:Slider
 expect Levels and a range: the app owns the value
