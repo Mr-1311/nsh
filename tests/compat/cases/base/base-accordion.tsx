@@ -39,7 +39,7 @@ function App() {
         multiple={multiple()}
         onChange={({ value }) => {
           changes.set(changes() + 1);
-          open.set(value);
+          open.set(value ?? []);
         }}
       >
         {item("a", "Shipping", { keepMounted: true })}
