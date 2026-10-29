@@ -388,7 +388,10 @@ one: a selector matching several fails the step, and the error says how to narro
 
 A step resolves once the app rendered nothing for 100 ms and no native animation runs that ends by itself (2 s at
 most, for apps that render all the time; on a manual clock, also 2 s of the app's time), so what it changed is on
-screen when the next line runs; use `waitFor` for what comes later (a response, a timer). An animation that loops
+screen when the next line runs; use `waitFor` for what comes later (a response, a timer). On a manual clock a step
+does not wait for those 100 ms: it resolves as soon as the app has run everything the step and the clock's time made
+due (timers due now, promises, a stubbed response answered at once) and wants no frame, unless a request is still in
+flight, so tests on a manual clock run without pauses between their steps. An animation that loops
 forever, such as a loading spinner, keeps running in the background while steps and `waitFor` go on, as an infinite
 CSS animation does in a browser's tests. A step rejects, failing the test, when nothing matches its selector (the error lists the texts on
 screen), when the app threw an exception meanwhile, and when the app asked for what only a real platform answers.
