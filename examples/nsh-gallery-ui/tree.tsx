@@ -12,10 +12,12 @@ import { colors } from "./theme";
 /**
  * A row: quiet until hovered, the selected one tinted in the brand color,
  * the keyboard's ring while the tree has the focus, disabled ones dimmed.
+ * The ring is drawn inside the row: the rows fill the list's width, whose
+ * scroll view clips what reaches past its sides.
  */
 export const treeItemClass =
   "group rounded-md transition-colors duration-150 motion-reduce:transition-none hover:bg-hover active:opacity-70 " +
-  "selected:bg-brand-tint focus:outline-2 focus:outline-ring disabled:opacity-40";
+  "selected:bg-brand-tint focus:outline-2 focus:-outline-offset-2 focus:outline-ring disabled:opacity-40";
 
 /** How far each level is indented, in points. */
 export const treeIndent = 14;
