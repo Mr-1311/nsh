@@ -580,11 +580,8 @@ fn cost_of_a_press(folders: usize, files: usize) -> Cost {
 /// for 18 items and for 10 200).
 const KEY_ITEMS: usize = 3;
 
-/// The most mount items one press on a row sends: the two rows' states as a
-/// key's, and with them what the press itself sends of the row pressed
-/// (its press down and up go through the platform's press handling, which
-/// a key never does), for any number of items (measured, for 18 items and
-/// for 10 200).
+/// The most mount items one press on a row sends, for any number of items
+/// (measured, for 18 items and for 10 200).
 const PRESS_ITEMS: usize = 8;
 
 #[test]
