@@ -1397,13 +1397,12 @@ tap label:Previous
 expect Log: 6, 7, 6
 expect Page 6 of 20
 # On the last page Next is disabled (`disabled:` applies): it takes no
-# press.
+# press, so it is nothing to tap.
 tap text:20
 expect Page 20 of 20
 prop label:Next accessibilityState disabled=true
 style label:Next opacity 0.5
 prop label:Previous accessibilityState {}
-tap label:Next
 expect Log: 6, 7, 6, 20
 # `compact`: Previous, the children and Next only.
 tap id:compact
