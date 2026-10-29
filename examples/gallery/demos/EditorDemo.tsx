@@ -310,9 +310,9 @@ export function EditorDemo() {
     while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
     const removed = before.length - head - tail;
     const added = after.length - head - tail;
-    const mark = (start: number, end: number, color: string): EditorDecoration => ({
+    const mark = (start: number, end: number, color: string, placement?: "before"): EditorDecoration => ({
       range: { start: { line: start, column: 0 }, end: { line: end, column: 0 } },
-      gutter: { class: color },
+      gutter: { class: color, placement },
       overviewRuler: { lane: "left", class: color },
     });
     const out: EditorDecoration[] = [];
@@ -320,7 +320,7 @@ export function EditorDemo() {
     if (modified > 0) out.push(mark(head, head + modified, "bg-amber-500"));
     if (added > removed) out.push(mark(head + modified, head + added, "bg-green-500"));
     // Deleted lines: a boundary where they were.
-    if (removed > added) out.push(mark(head + added, head + added, "bg-red-500"));
+    if (removed > added) out.push(mark(head + added, head + added, "bg-red-500", "before"));
     return out;
   });
   const decorations = computed<EditorDecoration[]>(() => {

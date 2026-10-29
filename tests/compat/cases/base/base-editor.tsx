@@ -110,10 +110,10 @@ export default function BaseEditor() {
               gutter: { class: "bg-green-500" },
               overviewRuler: { lane: "left", style: { backgroundColor: "#22c55e" } },
             },
-            { range: { start: { line: 3, column: 0 }, end: { line: 3, column: 0 } }, gutter: { style: { backgroundColor: "#ef4444" } } },
+            { range: { start: { line: 3, column: 0 }, end: { line: 3, column: 0 } }, gutter: { placement: "before", style: { backgroundColor: "#ef4444" } } },
           ]}
           gutterDecorationsWidth={4}
-          overviewRulerWidth={12}
+          classes={{ overviewRuler: "w-[12px]" }}
           onFoldChange={({ folds }) => folded.set(show(folds))}
           style={{ flex: 1 }}
         />

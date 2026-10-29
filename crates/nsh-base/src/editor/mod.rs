@@ -44,9 +44,9 @@ pub use completion::{
 pub use data::{
     EditorDecoration, EditorDiagnostic, EditorDiagnosticCodeDescription,
     EditorDiagnosticRelatedInformation, EditorDiagnosticSeverity, EditorDiagnosticTag, EditorEdit,
-    EditorFoldRange, EditorGutterMark, EditorLocation, EditorOverviewRulerLane,
-    EditorOverviewRulerMark, EditorPosition, EditorRange, EditorSearch, EditorSearchResult,
-    EditorSelection, EditorToken,
+    EditorFoldRange, EditorGutterMark, EditorGutterPlacement, EditorLocation,
+    EditorOverviewRulerLane, EditorOverviewRulerMark, EditorPosition, EditorRange, EditorSearch,
+    EditorSearchResult, EditorSelection, EditorToken,
 };
 pub use definition::{EditorCodeActionRequest, EditorDefinitionRequest, EditorDefinitionTrigger};
 pub use highlighter::{
@@ -148,11 +148,6 @@ pub struct EditorProps {
     /// before the line numbers, shows while a decoration has a mark there.
     #[prop(default = Points(3.0))]
     pub gutter_decorations_width: Prop<Points>,
-    /// The width of the overview ruler ([`EditorDecoration::overview_ruler`]),
-    /// in points (default 14, a scroll bar's). The ruler, along the right
-    /// edge over the text, shows while a decoration has a mark there.
-    #[prop(default = Points(14.0))]
-    pub overview_ruler_width: Prop<Points>,
     /// Classes of the editor's parts, after their own styles.
     #[prop(default)]
     pub classes: Prop<EditorClasses>,

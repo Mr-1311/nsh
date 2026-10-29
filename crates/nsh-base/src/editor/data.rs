@@ -275,17 +275,35 @@ pub struct EditorDecoration {
 
 /// A decoration's mark in the gutter's strip of marks
 /// ([`EditorDecoration::gutter`]): a bar the strip's width beside each line
-/// of a range, a line across the strip for an empty one. Its look is the
-/// app's; without any, it is the foreground color.
+/// of its range (an empty range's line, as `lineClass` styles it), or a
+/// line across the strip between two lines (`placement: "before"`). Its
+/// look is the app's; without any, it is the foreground color.
 #[derive(Debug, Clone, Default, PartialEq, JsObject)]
 #[non_exhaustive]
 pub struct EditorGutterMark {
+    /// Where it is drawn (default `lines`).
+    #[prop(default)]
+    pub placement: EditorGutterPlacement,
     /// Tailwind classes of the mark (`bg-*`, `opacity-*`).
     #[prop(skip_none)]
     pub class: Option<SharedString>,
     /// The inline style of the mark, over `class`.
     #[prop(skip_none)]
     pub style: Option<Style>,
+}
+
+/// Where a gutter mark is drawn ([`EditorGutterMark::placement`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PropEnum)]
+pub enum EditorGutterPlacement {
+    /// A bar beside every line the range covers; an empty range covers
+    /// its line (added or modified lines, a breakpoint).
+    #[default]
+    Lines,
+    /// A line across the strip at the boundary before the range's start:
+    /// at the top of its line when it starts a line, otherwise at the
+    /// bottom of its line (lines deleted there, at the end of a text with
+    /// no final line break too).
+    Before,
 }
 
 /// A decoration's mark on the overview ruler

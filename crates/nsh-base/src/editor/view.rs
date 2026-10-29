@@ -366,6 +366,9 @@ fn decoration_mark<E: Element>(
     })
 }
 
+/// The overview ruler's width, a scroll bar's (Monaco's).
+const RULER_WIDTH: f32 = 14.0;
+
 /// The overview ruler: along the editor's right edge, over the text, the
 /// decorations' marks at their rows' places in the whole text.
 fn overview_ruler(ed: Ed) -> impl IntoElement {
@@ -397,7 +400,9 @@ fn overview_ruler(ed: Ed) -> impl IntoElement {
                     .top_0()
                     .bottom_0()
                     .right_0()
-                    .w(move || Length::from(props.overview_ruler_width.get()))
+                    // A scroll bar's width, the part's to change: the
+                    // lanes are shares of it.
+                    .w(px(RULER_WIDTH))
                     .pointer_events(PointerEvents::None),
                 props,
                 EditorPart::OverviewRuler,
@@ -411,12 +416,26 @@ fn overview_ruler(ed: Ed) -> impl IntoElement {
                         let ed = ed.clone();
                         computed(move || ruler_place(&ed, &m.get()))
                     };
+                    let lane = {
+                        let ed = ed.clone();
+                        computed(move || {
+                            ed.marks_rev.get();
+                            let st = ed.st.borrow();
+                            let lane = st
+                                .decoration_items
+                                .get(item)
+                                .and_then(|d| d.overview_ruler.as_ref())
+                                .map(|r| r.lane)
+                                .unwrap_or_default();
+                            super::layout::ruler_lane(lane)
+                        })
+                    };
                     let el = view()
                         .absolute()
-                        .left(move || Length::from(place.get().origin.x))
-                        .top(move || Length::from(place.get().origin.y))
-                        .w(move || Length::from(place.get().size.width))
-                        .h(move || Length::from(place.get().size.height))
+                        .left(move || Length::from(relative(lane.get().0)))
+                        .w(move || Length::from(relative(lane.get().1)))
+                        .top(move || Length::from(place.get().0))
+                        .h(move || Length::from(place.get().1))
                         .bg(move || theme().foreground);
                     decoration_mark(el, ed.clone(), item, |d| {
                         d.overview_ruler
@@ -429,25 +448,14 @@ fn overview_ruler(ed: Ed) -> impl IntoElement {
     )
 }
 
-/// Where a mark is on the overview ruler: its rows scaled from the rows'
-/// height (or the editor's, when the text is shorter) to the ruler's, in
-/// its lane.
-fn ruler_place(ed: &Ed, mark: &RulerMark) -> Bounds<Points> {
+/// Where a mark is down the overview ruler: its top and height.
+fn ruler_place(ed: &Ed, mark: &RulerMark) -> (Points, Points) {
     let track = ed.viewport.get().height;
-    let width = ed.props.overview_ruler_width.get();
     let lh = {
         ed.text_rev.get();
         ed.st.borrow().line_height()
     };
-    let lane = ed
-        .st
-        .borrow()
-        .decoration_items
-        .get(mark.item)
-        .and_then(|d| d.overview_ruler.as_ref())
-        .map(|r| r.lane)
-        .unwrap_or_default();
-    super::layout::ruler_place(mark.rows.clone(), lh, rows_height(ed), track, width, lane)
+    super::layout::ruler_place(mark.rows.clone(), lh, rows_height(ed), track)
 }
 
 /// What takes the pointer for the fold marker of the display row in

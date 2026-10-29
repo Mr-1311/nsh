@@ -10,7 +10,8 @@ use nsh_core::geometry::{Bounds, Point as Pt, Points, Size, px};
 
 use super::{
     EditorDecoration, EditorDiagnostic, EditorDiagnosticSeverity, EditorDiagnosticTag,
-    EditorPosition, EditorSearch, EditorSearchResult, EditorSelection, app_highlight,
+    EditorGutterPlacement, EditorPosition, EditorSearch, EditorSearchResult, EditorSelection,
+    app_highlight,
     buffer::{Buffer, Change},
     commands::{EditOptions, Editing},
     diagnostics::{self, Mark},
@@ -980,9 +981,9 @@ impl State {
         let high = self.buffer.line_end(end_line - 1);
         app_highlight::near(&self.decorations, self.decoration_reach, low, high)
             .map(|(_, m)| m)
-            .filter(|m| self.decoration_items[m.item].gutter.is_some())
             .filter_map(|m| {
-                let place = if m.range.is_empty() {
+                let gutter = self.decoration_items[m.item].gutter.as_ref()?;
+                let place = if gutter.placement == EditorGutterPlacement::Before {
                     let at = self.buffer.line_of(m.range.start);
                     if at < line || at >= end_line {
                         return None;
@@ -1816,6 +1817,16 @@ mod tests {
         }
     }
 
+    /// A boundary mark (`placement: "before"`) at `at`.
+    fn boundary(at: (u32, u32)) -> EditorDecoration {
+        let mut d = marked(at, at);
+        d.gutter = Some(crate::editor::EditorGutterMark {
+            placement: EditorGutterPlacement::Before,
+            ..Default::default()
+        });
+        d
+    }
+
     fn gutter_places(st: &State, line: usize) -> Vec<(usize, GutterPlace)> {
         st.gutter_marks(st.display.line_row(line))
             .into_iter()
@@ -1833,15 +1844,17 @@ mod tests {
                 // Lines 1 and 2: ending at line 3's start leaves it out.
                 marked((1, 0), (3, 0)),
                 // Deleted lines before line 3.
-                marked((3, 0), (3, 0)),
+                boundary((3, 0)),
                 // A boundary after the last line, which has no line break.
-                marked((4, 1), (4, 1)),
+                boundary((4, 1)),
                 // Decorations without a gutter mark are not the strip's.
                 decoration(0, 0, 1),
+                // An empty range covers its line, as `lineClass` does.
+                marked((0, 1), (0, 1)),
             ],
         );
         assert!(st.has_gutter_marks());
-        assert!(gutter_places(&st, 0).is_empty());
+        assert_eq!(gutter_places(&st, 0), vec![(4, GutterPlace::Row)]);
         assert_eq!(gutter_places(&st, 1), vec![(0, GutterPlace::Row)]);
         assert_eq!(gutter_places(&st, 2), vec![(0, GutterPlace::Row)]);
         assert_eq!(gutter_places(&st, 3), vec![(1, GutterPlace::Top)]);
@@ -1859,7 +1872,7 @@ mod tests {
             &mut st,
             vec![
                 marked((2, 0), (2, 1)),
-                marked((3, 0), (3, 0)),
+                boundary((3, 0)),
                 marked((3, 0), (5, 0)),
             ],
         );

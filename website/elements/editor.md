@@ -326,17 +326,18 @@ const range = (line: number, start: number, end: number) => ({ start: { line, co
 ### Gutter and overview ruler marks
 
 A decoration's `gutter` puts a mark in a strip before the line numbers, beside every line its range covers: the lines
-a version-control diff added or modified. An empty range marks the boundary between two lines, where lines were
+a version-control diff added or modified, or a breakpoint (an empty range covers its line, as with `lineClass`). With
+`placement: "before"` it is a line across the strip at the boundary before the range's start, where lines were
 deleted. The strip is `gutterDecorationsWidth` points wide (3 by default) and stays while a decoration has a gutter
 mark, so the text keeps its place as marks come and go. A range inside a fold marks the fold's row.
 
-A decoration's `overviewRuler` puts a mark on the overview ruler, the strip along the editor's right edge
-`overviewRulerWidth` points wide (14 by default) that maps the whole text to its height, as Monaco's does. A mark is at
+A decoration's `overviewRuler` puts a mark on the overview ruler, the strip along the editor's right edge, 14 points
+wide (a scroll bar's; the `overviewRuler` part sets another width), that maps the whole text to its height, as Monaco's does. A mark is at
 least 6 points tall and takes a `lane` of the ruler: `left`, `center` (the default), `right` or `full`. The ruler shows
-while a decoration has a mark there; its `overviewRuler` part styles it.
+while a decoration has a mark there.
 
 Each mark takes the app's `class` and `style`, drawn in the foreground color without them. Both follow edits as the
-decoration's range does; an edit that deletes a marked range leaves its boundary.
+decoration's range does; an edit that deletes a marked range leaves an empty one where it was.
 
 ```tsx
 <Editor
@@ -346,7 +347,7 @@ decoration's range does; an edit that deletes a marked range leaves its boundary
   decorations={[
     { range: range(2, 0, 0), gutter: { class: "bg-yellow-500" }, overviewRuler: { lane: "left", class: "bg-yellow-500" } },
     { range: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } }, gutter: { class: "bg-green-500" } },
-    { range: range(6, 0, 0), gutter: { class: "bg-red-500" }, overviewRuler: { lane: "left", class: "bg-red-500" } },
+    { range: range(6, 0, 0), gutter: { class: "bg-red-500", placement: "before" }, overviewRuler: { lane: "left", class: "bg-red-500" } },
   ]}
   class="flex-1"
 />
@@ -767,7 +768,6 @@ is set with `fontFamily`, `fontSize` and `lineHeight`, which the editor measures
 | `diagnostics` | `.diagnostics(..)` | `EditorDiagnostic[]` | `[]` | Problems to mark ([Diagnostics](#diagnostics)). |
 | `decorations` | `.decorations(..)` | `EditorDecoration[]` | `[]` | Ranges the app styles ([Decorations](#decorations)). |
 | `gutterDecorationsWidth` | `.gutter_decorations_width(..)` | `number` | `3` | The width of the gutter's strip of decorations' marks, in points. |
-| `overviewRulerWidth` | `.overview_ruler_width(..)` | `number` | `14` | The width of the overview ruler, in points. |
 | `classes` | `.classes(..)` | `EditorClasses` | `{}` | Tailwind classes by part. |
 | `styles` | `.styles(..)` | `EditorStyles` | `{}` | Inline styles by part, over the classes. |
 | `accessibilityLabel` | `.accessibility_label(..)` | `string` | | What screen readers call the editor. |

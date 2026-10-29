@@ -334,11 +334,13 @@ does not move as marks come and go. Each painted gutter row asks for its marks w
 (`State::gutter_marks`): a row's lines are its fold's when folded, so a range or boundary inside a fold marks the
 fold's row; a non-empty range ending at a line's start leaves that line out; an empty range is a line across the top of
 its line's first row at a line start, across the bottom of its last row elsewhere (the end of a text without a final
-line break). Empty ranges are kept through edits (`adjust` collapses a deleted range to its boundary). The overview
-ruler (`view::overview_ruler`, the `overviewRuler` part) lies over the scroll view's right edge, receiving no pointer;
+line break); that boundary is `placement: "before"`, and by default an empty range covers its line, as it does for
+`lineClass` (one decoration, one meaning of its range). Empty ranges are kept through edits (`adjust` collapses a deleted range to its boundary). The overview
+ruler (`view::overview_ruler`, the `overviewRuler` part, 14 points wide unless the part sets a width; its lanes are
+shares of that width, so a width the app's classes set moves them too) lies over the scroll view's right edge, receiving no pointer;
 its marks' display rows (`State::overview_ruler_marks`) are worked out again only when the text, folds, wrapping or
 decorations change (`text_rev`, `marks_rev`), and their places (`layout::ruler_place`: the rows scaled from the
-rows' box to the viewport's height, at least 6 points, in Monaco's lanes) when the viewport does. GPUI Kit's folded
+rows' box to the viewport's height, at least 6 points; `layout::ruler_lane`, Monaco's lanes) when the viewport does. GPUI Kit's folded
 color and the theme's status colors are left out: a mark's look is the app's `class` / `style`.
 
 A diagnostic is LSP's `Diagnostic` with names for its enums: `codeDescription` and `relatedInformation` are data the
