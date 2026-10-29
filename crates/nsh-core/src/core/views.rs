@@ -562,10 +562,7 @@ impl<M: TextEngine> Core<M> {
                         inst.root_test_id_applied = super::components::test_id_of(&attrs);
                         (attrs, old)
                     }
-                    None => {
-                        inst.root_test_id_applied = super::components::test_id_of(&attrs);
-                        (attrs, old)
-                    }
+                    None => (attrs, old),
                 };
                 if self.components.slot_hosts.get(&id) == Some(&host) {
                     // An app's slot: what is not a style goes to its

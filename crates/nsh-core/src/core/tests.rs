@@ -12711,6 +12711,7 @@ mod views {
                 .test_id("own")
                 .label(move || SharedString::from(format!("pressed {}", presses.get())))
                 .on_press(move || presses.update(|n| *n += 1))
+                .child(view().label(move || SharedString::from(format!("child {}", presses.get()))))
         }
     }
 
@@ -12813,6 +12814,11 @@ mod views {
             "{:?}",
             batch.items
         );
+        assert_eq!(ids(&batch), [], "{:?}", batch.items);
+        // A second root update must not resend the given id after the child
+        // changed its own attributes in the previous commit.
+        assert!(c.component_event(root, EventKind::Press, &EventPayload::None));
+        let batch = c.commit().unwrap();
         assert_eq!(ids(&batch), [], "{:?}", batch.items);
         // Another id given.
         assert!(c.component_event(next, EventKind::Press, &EventPayload::None));
