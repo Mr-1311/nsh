@@ -119,7 +119,8 @@ pub use crate::{
         Editor, EditorApi, EditorBounds, EditorClasses, EditorCommand, EditorContextMenuEvent,
         EditorDecoration, EditorDiagnostic, EditorDiagnosticCodeDescription,
         EditorDiagnosticRelatedInformation, EditorDiagnosticSeverity, EditorDiagnosticTag,
-        EditorElement, EditorEvent, EditorFoldRange, EditorHoverEvent, EditorLocation, EditorPart,
+        EditorElement, EditorEvent, EditorFoldRange, EditorGutterMark, EditorHoverEvent,
+        EditorLocation, EditorOverviewRulerLane, EditorOverviewRulerMark, EditorPart,
         EditorPosition, EditorProps, EditorRange, EditorRect, EditorReplaceAll, EditorScrollBeyond,
         EditorSearch, EditorSearchResult, EditorSelection, EditorStyles, EditorTextPressEvent,
         EditorToken, editor,
@@ -235,11 +236,11 @@ pub mod parts {
         Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger, AlertDialog,
         Button, Calendar, Checkbox, Collapsible, ColorArea, ColorEyeDropper, ColorField,
         ColorPicker, ColorSlider, ColorSwatch, Combobox, ContextMenu, DataTable, DatePicker,
-        DiffView, DockArea, Editor, Link, Menu, MenuItem, MenuSeparator, NumberInput, OtpInput, Popover,
-        Progress, Radio, RadioGroup, ResizablePanel, ResizablePanelGroup, Scrollbar, Select, Sheet,
-        Slider, Submenu, Switch, Tab, Table, TableBody, TableCaption, TableCell, TableFooter,
-        TableHead, TableHeader, TableRow, Tabs, TextView, TimeField, Toast, ToastStack, Toggle, ToggleGroup, Tooltip,
-        plot, rich_editor, toast,
+        DiffView, DockArea, Editor, Link, Menu, MenuItem, MenuSeparator, NumberInput, OtpInput,
+        Popover, Progress, Radio, RadioGroup, ResizablePanel, ResizablePanelGroup, Scrollbar,
+        Select, Sheet, Slider, Submenu, Switch, Tab, Table, TableBody, TableCaption, TableCell,
+        TableFooter, TableHead, TableHeader, TableRow, Tabs, TextView, TimeField, Toast,
+        ToastStack, Toggle, ToggleGroup, Tooltip, plot, rich_editor, toast,
     };
 
     /// What a part does: registers its components, classes and modules.

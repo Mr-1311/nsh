@@ -241,3 +241,59 @@ mod tests {
         assert_eq!(edge_speed(px(5.0), px(0.0), inner), px(0.0));
     }
 }
+
+/// The least height of a mark on the overview ruler, as Monaco's.
+const RULER_MARK_MIN_HEIGHT: Points = Points(6.0);
+
+/// Where a mark covering display rows `rows` is on an overview ruler
+/// `width` wide and `track` tall, in `lane`: the rows' place in the rows'
+/// box (`content` tall, or the ruler's height when shorter) scaled to the
+/// ruler, at least [`RULER_MARK_MIN_HEIGHT`] tall and kept within it.
+pub(crate) fn ruler_place(
+    rows: std::ops::Range<usize>,
+    line_height: Points,
+    content: Points,
+    track: Points,
+    width: Points,
+    lane: super::EditorOverviewRulerLane,
+) -> nsh_core::geometry::Bounds<Points> {
+    use nsh_core::geometry::{Bounds, size};
+
+    use super::EditorOverviewRulerLane as Lane;
+    let content = content.max(track).max(px(1.0));
+    let scale = track / content;
+    let height = (line_height * rows.len() as f32 * scale).max(RULER_MARK_MIN_HEIGHT);
+    let top = (line_height * rows.start as f32 * scale).min((track - height).max(px(0.0)));
+    let third = width / 3.0;
+    let (x, w) = match lane {
+        Lane::Left => (px(0.0), third),
+        Lane::Center => (third, third),
+        Lane::Right => (third * 2.0, third),
+        Lane::Full => (px(0.0), width),
+    };
+    Bounds::new(Point::new(x, top), size(w, height))
+}
+
+#[cfg(test)]
+mod ruler_tests {
+    use super::*;
+    use crate::editor::EditorOverviewRulerLane as Lane;
+
+    #[test]
+    fn ruler_marks_scale_to_the_ruler_in_their_lanes() {
+        let lh = px(20.0);
+        // 100 rows (2000 points) on a 200 point ruler: a tenth.
+        let mark = ruler_place(50..60, lh, px(2000.0), px(200.0), px(15.0), Lane::Left);
+        assert_eq!(mark.origin, Point::new(px(0.0), px(100.0)));
+        assert_eq!(mark.size.width, px(5.0));
+        assert_eq!(mark.size.height, px(20.0));
+        // A row is at least six points tall, kept within the ruler.
+        let mark = ruler_place(99..100, lh, px(2000.0), px(200.0), px(15.0), Lane::Right);
+        assert_eq!(mark.origin, Point::new(px(10.0), px(194.0)));
+        assert_eq!(mark.size.height, px(6.0));
+        // A short text keeps its rows' places.
+        let mark = ruler_place(2..3, lh, px(100.0), px(200.0), px(15.0), Lane::Full);
+        assert_eq!(mark.origin.y, px(40.0));
+        assert_eq!(mark.size.width, px(15.0));
+    }
+}

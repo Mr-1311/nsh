@@ -2920,6 +2920,8 @@ covers [events] Editor.onCompletionAccept
 covers [events] Editor.onInlineCompletionRequest
 covers [props] Editor.diagnostics
 covers [props] Editor.styles
+covers [props] Editor.gutterDecorationsWidth
+covers [props] Editor.overviewRulerWidth
 covers [events] Editor.onDefinitionRequest
 covers [events] Editor.onCodeActionRequest
 
