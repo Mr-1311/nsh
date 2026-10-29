@@ -1723,7 +1723,7 @@ impl<M: TextEngine + 'static> Driver<M> {
             }
             Message::Flush(done) => {
                 let running = self.flush(rx);
-                done(running && rx.is_empty() && self.state.net.idle());
+                done(running && self.idle(rx));
                 running
             }
             // A test's clock on a real platform: the display's frame moves it
@@ -1812,6 +1812,19 @@ impl<M: TextEngine + 'static> Driver<M> {
             }
         }
         true
+    }
+
+    /// Whether nothing is left to run: no message queued, nothing due at
+    /// the clock's time (a timer that keeps scheduling another at once
+    /// outlasts a flush's rounds) and no request in flight.
+    fn idle(&self, rx: &Receiver<Message>) -> bool {
+        let now = self.clock.now();
+        rx.is_empty()
+            && self.state.net.idle()
+            && [self.due(), self.clock.next_alarm()]
+                .into_iter()
+                .flatten()
+                .all(|at| at > now)
     }
 
     /// When the next display frame of a clock that moves with the

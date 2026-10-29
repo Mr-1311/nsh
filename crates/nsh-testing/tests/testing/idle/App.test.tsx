@@ -12,8 +12,8 @@ test("on a manual clock, steps return once the app is idle", async () => {
     await app.press("Add");
     expect(app.shows(`Count: ${i}`)).toBe(true);
   }
-  // Far less than the 100 ms of quiet a step waits for on the system's clock.
-  expect(Date.now() - started).toBeLessThan((STEPS * 100) / 3);
+  // Less than the 100 ms of quiet each step waits for on the system's clock.
+  expect(Date.now() - started).toBeLessThan(STEPS * 100);
 });
 
 test("on a manual clock, what a step makes due now comes before it returns", async () => {

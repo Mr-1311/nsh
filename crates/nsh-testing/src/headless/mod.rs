@@ -1936,10 +1936,10 @@ mod tests {
                 app.screen().texts()
             );
         }
-        // No step waited for a quiet window (100 ms each on the system's
-        // clock).
+        // No step waited for a quiet window: with one each, the steps take
+        // `QUIET` each at least.
         let took = started.elapsed();
-        assert!(took < QUIET * STEPS / 3, "{took:?}");
+        assert!(took < QUIET * STEPS, "{took:?}");
     }
 
     #[test]

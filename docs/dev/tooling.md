@@ -340,7 +340,7 @@ a step or `waitFor` waits), its values move as the clock does; the settle limit 
 responses back as the clock's alarms. A step settles without waiting for quiet (`Headless::idle_on_manual_clock`):
 `EngineControl::flush` has the engine run what was sent to it and what is due at the clock's time, again while that
 queues more (a task's wake, a response answered at once), then answer, after the batches of what ran, whether it is
-idle (nothing left queued, no request in flight); the step returns once that answer is idle, the batches applied
+idle (nothing left queued or due now, no request in flight); the step returns once that answer is idle, the batches applied
 brought none, and no frame is wanted. While a request is in flight (its answer comes from another thread: a handler,
 the test's JS) or work keeps coming, it waits for 100 ms of quiet as on the system's clock. Work the app hands to
 other threads that has not woken the engine yet (file I/O, a task awaiting a thread) is not waited for: `waitFor` what
