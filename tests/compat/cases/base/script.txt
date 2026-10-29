@@ -1160,6 +1160,8 @@ frame id:item-a 0 0 390 50
 frame id:panel-a 0 20 390 30
 frame id:item-b 0 50 390 20
 frame id:faq 0 20 390 90
+tap id:details-a
+expect Taps a: 1
 # One open at a time: another item replaces it. The revealed panel's
 # frames are where its spring ends.
 tap text:Returns
@@ -1173,6 +1175,10 @@ absent Shipping details
 frame id:item-a 0 0 390 20
 frame id:item-b 0 20 390 50
 frame id:faq 0 20 390 90
+# The kept panel's content stays in the tree while closed, out of sight.
+listens id:details-a onPress
+tap id:details-b
+expect Taps b: 1
 # The open item's trigger closes it; the revealed panel springs shut and
 # its content leaves once it has.
 tap text:Returns
@@ -1188,6 +1194,9 @@ tap text:Shipping
 expect Open: b,a
 expect Shipping details
 expect Returns details
+# Either panel's content comes back as it was.
+expect Taps a: 1
+expect Taps b: 1
 frame id:faq 0 20 390 120
 tap text:Returns
 expect Open: a
