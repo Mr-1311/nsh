@@ -574,8 +574,16 @@ pub(crate) fn released(surface: &Surface) {
 
 // --- Autoscroll ---------------------------------------------------------------------
 
-/// How often a drag past a scroll view's edge scrolls it (ms).
+/// How often a drag near or past a scroll view's edge scrolls it (ms).
 const AUTOSCROLL_INTERVAL: u64 = 16;
+/// How far inside the edge scrolling starts: a maximized window leaves the
+/// pointer little room past its edge.
+const AUTOSCROLL_INSIDE: f32 = 16.0;
+/// Points per tick at the start of that zone, and from
+/// [`AUTOSCROLL_RAMP`] past it on (linearly in between).
+const AUTOSCROLL_MIN: f32 = 12.0;
+const AUTOSCROLL_MAX: f32 = 64.0;
+const AUTOSCROLL_RAMP: f32 = 96.0;
 
 /// The scroll view around the dragging mouse's area that it is past an
 /// edge of, and by how much to scroll it (wheel deltas).
@@ -603,21 +611,23 @@ fn autoscroll_target(surface: &Surface) -> Option<(NshView, f32, f32)> {
             .root
             .compute_point(&view, &graphene::Point::new(last.0, last.1))
             .map_or(last, |p| (p.x(), p.y()));
+        // How far into the edge zone (from just inside the edge outward).
         let past = |at: f32, extent: f32| {
-            if at < 0.0 {
-                at
-            } else if at > extent {
-                at - extent
+            if at < AUTOSCROLL_INSIDE {
+                at - AUTOSCROLL_INSIDE
+            } else if at > extent - AUTOSCROLL_INSIDE {
+                at - (extent - AUTOSCROLL_INSIDE)
             } else {
                 0.0
             }
         };
-        // Faster the further past the edge, as browsers scroll.
+        // Faster the further out, up to a page-flipping pace.
         let speed = |d: f32| {
             if d == 0.0 {
                 0.0
             } else {
-                d.signum() * (d.abs() / 4.0).clamp(1.0, 24.0)
+                let t = (d.abs() / AUTOSCROLL_RAMP).min(1.0);
+                d.signum() * (AUTOSCROLL_MIN + t * (AUTOSCROLL_MAX - AUTOSCROLL_MIN))
             }
         };
         let (dx, dy) = if horizontal {
