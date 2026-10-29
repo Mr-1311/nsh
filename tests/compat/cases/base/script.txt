@@ -814,7 +814,7 @@ style parent:parent:id:sidebar-mark backgroundColor #222222ff
 # Disabled: dimmed for screen readers, `disabled:` on its indicator.
 prop id:minimap role menuitemcheckbox
 prop id:minimap accessibilityState disabled=true checked=false
-style parent:id:minimap-mark backgroundColor #333333ff
+style parent:parent:id:minimap-mark backgroundColor #333333ff
 # `role="menuitemradio"`: one choice of a group, the app checks one.
 prop id:sort-name role menuitemradio
 prop id:sort-name accessibilityState checked=true
