@@ -118,8 +118,9 @@ const KEYFRAMES = `
   touch-action: none; }
 .nsh-root * { box-sizing: border-box; }
 .nsh-v { position: absolute; margin: 0; padding: 0; min-width: 0; min-height: 0; }
+/* The keyboard focus shows as the app draws it (focus: styles), as
+   on the desktop backends: no ring of the browser's or the runtime's. */
 .nsh-v:focus { outline: none; }
-.nsh-v:focus-visible { outline: 2px solid var(--nsh-focus-ring, #0a84ff); outline-offset: -2px; }
 .nsh-scroll { overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .nsh-scroll { touch-action: pan-x pan-y; }
 /* In an iframe, swipes the app does not take scroll the embedding page. */
@@ -337,6 +338,11 @@ const CODE_CHARS = {
   Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]", Backslash: "\\", IntlBackslash: "\\", Semicolon: ";",
   Quote: "'", Comma: ",", Period: ".", Slash: "/", Backquote: "`", Space: " ",
 };
+
+/** The offset of local time at `ms` (since the epoch) in seconds east of UTC. */
+function localOffset(ms) {
+  return 0 - new Date(ms).getTimezoneOffset() * 60;
+}
 
 /** The browser's time zone (`Asia/Shanghai`), Intl's default; "" when unknown. */
 function timeZoneName() {
@@ -859,6 +865,8 @@ class Player {
       nsh: {
         now_ms: () => performance.now(),
         date_now_ms: () => Date.now(),
+        // Today where the app runs (`nsh-base`'s calendars).
+        local_offset: (ms) => localOffset(ms),
         // Intl's default zone.
         time_zone: (p, cap) => {
           const zone = encoder.encode(timeZoneName());
@@ -4726,7 +4734,7 @@ class Player {
       return value;
     };
     const execute = async () => {
-      if (!navigator.storage?.getDirectory) throw error("ENOTSUP", "This browser does not provide Origin Private File System storage");
+      if (!navigator.storage?.getDirectory) throw error("ERR_FEATURE_UNAVAILABLE_ON_PLATFORM", "This browser does not provide Origin Private File System storage");
       const origin = await navigator.storage.getDirectory();
       // Hashing makes arbitrary app IDs safe as a single OPFS directory name.
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(request.namespace));

@@ -1,5 +1,6 @@
 mod classes;
 mod components;
+mod layout_scope;
 mod layout_tree;
 mod list;
 mod measure;
@@ -957,6 +958,10 @@ pub struct Core<M: TextEngine> {
     /// Scroll views and lists whose built-in bar may come or go
     /// ([`Core::sync_scrollbars`]).
     scrollbars_pending: Vec<Key>,
+    /// Canvases fitting a view box into their box
+    /// ([`crate::canvas::ViewPaint::Fit`]) to send once this round's
+    /// layout gave them their size ([`Core::send_fitted`]).
+    fitted_pending: Vec<Key>,
     /// Scroll views and lists that show a built-in bar.
     decorated: Vec<Key>,
     /// Sticky views came, went or moved: their ranges are worked out
@@ -1004,6 +1009,11 @@ pub struct Core<M: TextEngine> {
     commands: Vec<(NodeId, Command)>,
     /// Animates the layout changes of the next commit.
     layout_animation: Option<LayoutAnimation>,
+    /// Nodes whose change animates the frames it moves in the next commit
+    /// (`layout_scope.rs`).
+    scoped_layout: Vec<(NodeId, crate::LayoutTransition)>,
+    /// Nodes that changed size while `scoped_layout` waits.
+    resized: Vec<Key>,
     /// The nodes whose padding or margin uses `env()` (`Node::env`).
     env_styled: rustc_hash::FxHashSet<NodeId>,
     /// Scratch of [`Core::sync_env`].
@@ -1122,6 +1132,7 @@ impl<M: TextEngine> Core<M> {
             sticky_scrollers: Vec::new(),
             builtin_scrollbars: None,
             scrollbars_pending: Vec::new(),
+            fitted_pending: Vec::new(),
             decorated: Vec::new(),
             sticky_changed: false,
             sticky_warned: false,
@@ -1143,6 +1154,8 @@ impl<M: TextEngine> Core<M> {
             batches: 0,
             commands: Vec::new(),
             layout_animation: None,
+            scoped_layout: Vec::new(),
+            resized: Vec::new(),
             env_styled: Default::default(),
             env_scratch: Vec::new(),
             status_bar_nodes: Vec::new(),
@@ -1287,6 +1300,15 @@ impl<M: TextEngine> Core<M> {
     /// sources, web views and the status bar are checked against it.
     pub fn set_access(&mut self, access: Arc<crate::access::Access>) {
         self.access = access;
+    }
+
+    /// Sets what the core's own image loads (an [`crate::element::svg`]'s
+    /// bytes) go through: the app's bundled files, access policy and disk
+    /// cache. Without it they read inline bytes, files and `asset:/` URIs
+    /// of no base only.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_image_context(&mut self, context: crate::image::loader::Context) {
+        crate::image::loader::set_context(context);
     }
 
     /// Serves the app's clipboard calls from `backend` instead of the
@@ -1742,6 +1764,23 @@ impl<M: TextEngine> Core<M> {
                 // the drawing fills with it).
                 let background_moved = node.drawing.as_ref().is_some_and(|d| d.paints_background())
                     != drawing.paints_background();
+                // A drawing fitting a view box lays its canvas out at its
+                // natural size, as an image.
+                let natural = drawing.fit().map(|fit| fit.size);
+                if node
+                    .drawing
+                    .as_ref()
+                    .and_then(|d| d.fit())
+                    .map(|fit| fit.size)
+                    != natural
+                    && let Some(layout) = node.layout
+                {
+                    self.layout
+                        .set_node_context(layout, natural.map(|n| LeafContext::Image(Some(n))));
+                    self.layout.mark_dirty(layout);
+                    self.needs_layout = true;
+                }
+                let node = &mut self.nodes[key as usize];
                 node.drawing = Some(Arc::from(drawing));
                 let flags = dirty::CANVAS
                     | if slots_changed { dirty::ANIMATION } else { 0 }
@@ -1750,10 +1789,21 @@ impl<M: TextEngine> Core<M> {
                 Ok(())
             }
             Op::Command {
+                id: crate::ROOT_ID,
                 command: Command::LayoutAnimation(animation),
-                ..
             } => {
                 self.layout_animation = Some(animation);
+                Ok(())
+            }
+            // Sent to a node: the frames its change moves.
+            Op::Command {
+                id,
+                command: Command::LayoutAnimation(animation),
+            } => {
+                self.key(id)?;
+                if let Some(transition) = animation.update {
+                    self.scope_layout_animation(id, transition);
+                }
                 Ok(())
             }
             Op::Command {
@@ -1822,6 +1872,7 @@ impl<M: TextEngine> Core<M> {
         if !self.outer_asked.is_empty() {
             self.send_outer_scrolls();
         }
+        self.split_scoped_frames();
         if self.mount.is_empty() || matches!(self.mount[..], [MountItem::LayoutAnimation(_)]) {
             self.mount.clear();
             None
@@ -1886,6 +1937,9 @@ impl<M: TextEngine> Core<M> {
         }
         if !self.overlays.is_empty() {
             self.place_overlays();
+        }
+        if !self.fitted_pending.is_empty() {
+            self.send_fitted();
         }
         self.flush_text();
         // What this turn's status bar settings add up to, once.
@@ -1992,20 +2046,15 @@ impl<M: TextEngine> Core<M> {
                 Command::HostCall { id: call, name, .. }
                     if !crate::access::valid_host_name(name) =>
                 {
-                    let message = format!(
-                        "nsh/host: invalid function name {name:?} ({})",
-                        crate::access::HOST_NAME_CHARS
-                    );
-                    self.answer_host(*call, Err(message.clone()));
-                    self.deny(message);
+                    let error = crate::host_channel::invalid_name(name);
+                    self.deny(error.message().to_owned());
+                    self.answer_host(*call, Err(error));
                     continue;
                 }
                 Command::HostCall { id: call, name, .. } if !self.access.allows_host(name) => {
-                    let message = format!(
-                        "nsh/host: `{name}` is not granted: add it to capabilities.host in nsh.json"
-                    );
-                    self.answer_host(*call, Err(message.clone()));
-                    self.deny(message);
+                    let error = crate::host_channel::not_granted(name);
+                    self.deny(error.message().to_owned());
+                    self.answer_host(*call, Err(error));
                     continue;
                 }
                 Command::StatusBar(_) if !self.access.allows_status_bar() => {
@@ -2663,6 +2712,55 @@ impl<M: TextEngine> Core<M> {
         }
     }
 
+    /// Canvas `key`'s `drawing` as its platform gets it: its
+    /// [`crate::canvas::Drawing::view_paints`] resolved with its style and
+    /// its box.
+    fn mounted_drawing(
+        &self,
+        key: Key,
+        drawing: &Arc<crate::canvas::Drawing>,
+    ) -> Arc<crate::canvas::Drawing> {
+        if drawing.view_paints.is_empty() {
+            return drawing.clone();
+        }
+        let node = &self.nodes[key as usize];
+        let (paint, current) = self.resolved_paint(key);
+        let style = &node.view_style;
+        let images = style
+            .effects
+            .as_deref()
+            .map_or(&[][..], |e| &e.background_images[..]);
+        let size = if node.frame == Bounds::UNSET {
+            Size::default()
+        } else {
+            node.frame.size
+        };
+        Arc::new(drawing.painted(&paint, current, style.background_color, images, size))
+    }
+
+    /// Sends the canvases fitting a view box that changed or were given
+    /// another size this round, with the size the layout gave them.
+    fn send_fitted(&mut self) {
+        let mut pending = std::mem::take(&mut self.fitted_pending);
+        pending.sort_unstable();
+        pending.dedup();
+        for &key in &pending {
+            let Some(node) = self.nodes.get(key as usize) else {
+                continue;
+            };
+            if !node.created {
+                continue;
+            }
+            let Some(drawing) = &node.drawing else {
+                continue;
+            };
+            let (id, drawing) = (node.id, self.mounted_drawing(key, drawing));
+            self.mount.push(MountItem::Canvas { id, drawing });
+        }
+        pending.clear();
+        self.fitted_pending = pending;
+    }
+
     /// The paint properties canvas `key` paints with (its own over those
     /// of the views around it, as CSS inherits them) and its text color,
     /// for `currentColor`.
@@ -2776,8 +2874,9 @@ impl<M: TextEngine> Core<M> {
         }
     }
 
-    /// `prop` with what the app may not reach removed: a refused image
-    /// fails (`onError`), a refused video or web view source shows nothing.
+    /// `prop` with what the app may not reach removed: a refused image,
+    /// video or web view source shows nothing and fails (`onError` with
+    /// `code` `ERR_ACCESS_DENIED`).
     fn check_prop(&mut self, key: Key, prop: Prop) -> Prop {
         if self.access.is_unrestricted() {
             return prop;
@@ -2786,16 +2885,28 @@ impl<M: TextEngine> Core<M> {
         let (id, kind) = (node.id, node.kind);
         // Always reported: the `onError` listener may be set after the
         // source (JS finds the handler when the event is delivered).
-        let refuse = |core: &mut Self, what: &str, uri: &str, capability: &str| {
-            let message = not_granted(what, uri, capability);
+        let report = |core: &mut Self, message: String| {
             core.events.push(crate::element::JsEvent::Event(
                 id,
                 EventKind::Error,
-                EventPayload::Error {
-                    message: message.clone(),
-                },
+                EventPayload::Map(vec![
+                    ("message", PayloadValue::Str(message.clone())),
+                    (
+                        "code",
+                        PayloadValue::Str(crate::element::codes::ACCESS_DENIED.into()),
+                    ),
+                ]),
             ));
             core.deny(message);
+        };
+        let refuse = |core: &mut Self, what: &str, uri: &str, capability: &str| {
+            report(core, not_granted(what, uri, capability));
+        };
+        let no_webviews = |core: &mut Self| {
+            report(
+                core,
+                "web views are not granted: add `webview` to capabilities in nsh.json".into(),
+            );
         };
         match prop {
             Prop::Source(Some(source)) if !self.access.allows_media(&source.uri) => {
@@ -2823,9 +2934,7 @@ impl<M: TextEngine> Core<M> {
             Prop::Native(NativeProp::Html(Some(_)))
                 if kind == Kind::WebView && !self.access.allows_webviews() =>
             {
-                self.deny(
-                    "web views are not granted: add `webview` to capabilities in nsh.json".into(),
-                );
+                no_webviews(self);
                 Prop::Native(NativeProp::Html(None))
             }
             Prop::Native(NativeProp::Source(crate::WebSource::Uri(uri)))
@@ -2843,9 +2952,7 @@ impl<M: TextEngine> Core<M> {
             Prop::Native(NativeProp::Source(crate::WebSource::Html { .. }))
                 if kind == Kind::WebView && !self.access.allows_webviews() =>
             {
-                self.deny(
-                    "web views are not granted: add `webview` to capabilities in nsh.json".into(),
-                );
+                no_webviews(self);
                 Prop::Native(NativeProp::Source(crate::WebSource::None))
             }
             prop => prop,
@@ -4700,18 +4807,13 @@ impl<M: TextEngine> Core<M> {
             if flags & dirty::CANVAS != 0
                 && let Some(drawing) = &node.drawing
             {
-                let drawing = if drawing.view_paints.is_empty() {
-                    drawing.clone()
+                if drawing.fit().is_some() {
+                    // Its size comes with this round's layout.
+                    self.fitted_pending.push(key);
                 } else {
-                    let (paint, current) = self.resolved_paint(key);
-                    let style = &node.view_style;
-                    let images = style
-                        .effects
-                        .as_deref()
-                        .map_or(&[][..], |e| &e.background_images[..]);
-                    Arc::new(drawing.painted(&paint, current, style.background_color, images))
-                };
-                self.mount.push(MountItem::Canvas { id, drawing });
+                    let drawing = self.mounted_drawing(key, drawing);
+                    self.mount.push(MountItem::Canvas { id, drawing });
+                }
             }
             if flags & dirty::SHADER != 0
                 && let Some(shader) = &node.shader
@@ -6143,7 +6245,10 @@ impl<M: TextEngine> Core<M> {
     fn set_frame(&mut self, key: Key, frame: Bounds<Points>) {
         let node = &mut self.nodes[key as usize];
         if node.frame != frame {
+            let resized = node.frame.size != frame.size;
             node.frame = frame;
+            self.note_resized(key, resized);
+            let node = &self.nodes[key as usize];
             let (id, is_text) = (node.id, node.kind == Kind::Text);
             if node.events.contains(EventKind::Layout) {
                 self.events.push(crate::element::JsEvent::Event(
@@ -6170,6 +6275,12 @@ impl<M: TextEngine> Core<M> {
             }
             if is_text {
                 self.queue_text(key);
+            }
+            // A view box fits into the new size.
+            let node = &self.nodes[key as usize];
+            if node.kind == Kind::Canvas && node.drawing.as_ref().is_some_and(|d| d.fit().is_some())
+            {
+                self.fitted_pending.push(key);
             }
         }
     }

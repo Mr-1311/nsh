@@ -635,6 +635,17 @@ pub trait Network: Send + Sync + 'static {
 pub trait Assets: Send + Sync + 'static {
     /// The bytes of `uri`. Blocking; called on the engine thread.
     fn read(&self, uri: &str) -> Result<Vec<u8>, String>;
+
+    /// Where `asset:/` URIs resolve, when it is a directory or a URL the
+    /// image loader can read itself: the core's image loads ([`svg`]s)
+    /// then share the platform's cache entries. `None`: through
+    /// [`Assets::read`].
+    ///
+    /// [`svg`]: nsh_core::element::svg
+    #[cfg(not(target_arch = "wasm32"))]
+    fn base(&self) -> Option<nsh_core::image::loader::AssetBase> {
+        None
+    }
 }
 
 /// Engine settings.
@@ -1411,6 +1422,18 @@ impl<M: TextEngine + 'static> Driver<M> {
             core.set_max_nodes(config.limits.max_nodes);
         }
         core.set_access(access.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        core.set_image_context(nsh_core::image::loader::Context {
+            asset_base: config.assets.as_ref().and_then(|a| a.base()),
+            read_asset: config.assets.clone().map(|assets| {
+                Arc::new(move |uri: &str| assets.read(uri)) as nsh_core::image::loader::ReadAsset
+            }),
+            access: access.clone(),
+            // The same cache as the platform's ([`Engine::image_cache`]).
+            disk: config.cache.open_images(config.app.app_id()),
+            // The platform's, if it set one ([`nsh_core::image::loader::set_transport`]).
+            transport: None,
+        });
         core.set_storage(app_storage(&config));
         core.set_clipboard(config.clipboard.clone());
         core.set_picker(config.picker.clone());
@@ -1963,7 +1986,7 @@ impl Net {
         let mut tasks = std::mem::take(&mut self.tasks);
         for (id, request) in tasks.drain(..) {
             if let Err(refused) = self.request(Requester::Task(id), request) {
-                core.fetch_event(id, FetchEvent::Failed(refused));
+                core.fetch_event(id, FetchEvent::Failed(refused.message));
             }
         }
         self.tasks = tasks;
@@ -1974,7 +1997,7 @@ impl Net {
             match op {
                 FetchOp::Start(request) => {
                     if let Err(refused) = self.request(who, request) {
-                        script.fetch_event(id, FetchEvent::Failed(refused));
+                        script.fetch_refused(id, &refused.message, &refused.url);
                     }
                 }
                 FetchOp::Send(chunk) => {
@@ -2005,7 +2028,7 @@ impl Net {
     }
 
     /// Makes `who`'s request, if the app may (else why not).
-    fn request(&mut self, who: Requester, request: HttpRequest) -> Result<(), String> {
+    fn request(&mut self, who: Requester, request: HttpRequest) -> Result<(), access::Refused> {
         if self.access.is_unrestricted() {
             self.start(who, request, None);
         } else if !self.access.allows_http(&request.method, &request.url) {
@@ -2046,24 +2069,35 @@ impl Net {
 
     /// An event of hop `hop` of request `id`: what JS is told, if anything
     /// (`None` for events of hops left behind, and redirects the engine
-    /// follows).
-    fn event(&mut self, id: Requester, hop: u64, event: FetchEvent) -> Option<FetchEvent> {
+    /// follows; `Err` for a redirect the app may not follow).
+    fn event(
+        &mut self,
+        id: Requester,
+        hop: u64,
+        event: FetchEvent,
+    ) -> Option<Result<FetchEvent, access::Refused>> {
         if self.network.is_none() {
-            return Some(event);
+            return Some(Ok(event));
         }
         let inflight = self.inflight.get_mut(&id).filter(|i| i.hop == hop)?;
         match event {
             FetchEvent::Head(head) => {
                 let Some(followed) = &mut inflight.followed else {
-                    return Some(FetchEvent::Head(head));
+                    return Some(Ok(FetchEvent::Head(head)));
                 };
                 match access::next(&self.access, followed, head) {
-                    access::Next::Done(head) => Some(FetchEvent::Head(head)),
+                    access::Next::Done(head) => Some(Ok(FetchEvent::Head(head))),
                     access::Next::Fail(message) => {
                         if let Some(i) = self.inflight.remove(&id) {
                             i.task.cancel();
                         }
-                        Some(FetchEvent::Failed(message))
+                        Some(Ok(FetchEvent::Failed(message)))
+                    }
+                    access::Next::Refused(refused) => {
+                        if let Some(i) = self.inflight.remove(&id) {
+                            i.task.cancel();
+                        }
+                        Some(Err(refused))
                     }
                     access::Next::Hop(request) => {
                         let i = self.inflight.remove(&id)?;
@@ -2076,9 +2110,9 @@ impl Net {
             }
             FetchEvent::End | FetchEvent::Failed(_) => {
                 self.inflight.remove(&id);
-                Some(event)
+                Some(Ok(event))
             }
-            event => Some(event),
+            event => Some(Ok(event)),
         }
     }
 }
@@ -2583,22 +2617,23 @@ fn handle<M: TextEngine>(script: Option<&Script>, state: &mut State<M>, message:
         Message::States(id, states) => state.core.set_states(id, states),
         Message::FontsChanged => state.core.fonts_changed(),
         Message::Remount => state.core.remount(),
-        Message::Fetch(who, hop, event) => {
-            if let Some(event) = state.net.event(who, hop, event) {
-                match who {
-                    Requester::Js(id) => {
-                        if let Some(script) = script {
-                            script.fetch_event(id, event);
-                        }
-                    }
-                    Requester::Task(id) => {
-                        if !state.core.fetch_event(id, event) {
-                            state.net.cancel(who);
-                        }
+        Message::Fetch(who, hop, event) => match (who, state.net.event(who, hop, event)) {
+            (_, None) => {}
+            (Requester::Js(id), Some(event)) => {
+                if let Some(script) = script {
+                    match event {
+                        Ok(event) => script.fetch_event(id, event),
+                        Err(refused) => script.fetch_refused(id, &refused.message, &refused.url),
                     }
                 }
             }
-        }
+            (Requester::Task(id), Some(event)) => {
+                let event = event.unwrap_or_else(|refused| FetchEvent::Failed(refused.message));
+                if !state.core.fetch_event(id, event) {
+                    state.net.cancel(who);
+                }
+            }
+        },
         Message::Hot(update) => state.hot.push(update),
         Message::Chunk(chunk) => {
             if let Some(script) = script {

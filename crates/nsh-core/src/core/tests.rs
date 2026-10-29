@@ -3330,6 +3330,85 @@ fn layout_animation_leads_the_batch() {
     );
 }
 
+/// A region (2) over a view after it (4) and a fixed board (6) whose row
+/// (8) changes too: what each frame item of `batch` animates with.
+fn scoped_layout_commit(root_too: bool) -> Vec<(NodeId, Option<crate::LayoutTransition>)> {
+    let mut c = core();
+    let mut ops = Vec::new();
+    for (id, parent, height) in [(2, 1, 10.0), (4, 1, 10.0), (6, 1, 40.0), (8, 6, 10.0)] {
+        ops.push(Op::Create { id, tag: Tag::View });
+        ops.push(style_op(id, &[("height", StyleValue::Number(height))]));
+        ops.push(Op::Insert {
+            parent,
+            child: id,
+            before: None,
+        });
+    }
+    apply(&mut c, ops);
+    c.commit().unwrap();
+    let spring = crate::LayoutTransition::new(crate::LayoutCurve::Spring { damping: 1.0 }, 265.0);
+    let mut ops = vec![
+        style_op(2, &[("height", StyleValue::Number(30.0))]),
+        style_op(8, &[("height", StyleValue::Number(20.0))]),
+        Op::Command {
+            id: 2,
+            command: Command::LayoutAnimation(crate::LayoutAnimation {
+                update: Some(spring),
+                ..Default::default()
+            }),
+        },
+    ];
+    if root_too {
+        ops.push(Op::Command {
+            id: 1,
+            command: Command::LayoutAnimation(crate::LayoutAnimation::EASE_IN_EASE_OUT),
+        });
+    }
+    apply(&mut c, ops);
+    let batch = c.commit().unwrap();
+    let mut current = None;
+    let mut frames = Vec::new();
+    for item in &batch.items {
+        match item {
+            MountItem::LayoutAnimation(a) => current = a.update,
+            MountItem::Frame { id, .. } => frames.push((*id, current)),
+            _ => {}
+        }
+    }
+    frames
+}
+
+#[test]
+fn a_layout_animation_on_a_node_animates_the_frames_it_moves() {
+    let frames = scoped_layout_commit(false);
+    let animated = |id| {
+        frames
+            .iter()
+            .find(|f| f.0 == id)
+            .unwrap_or_else(|| panic!("no frame of {id}: {frames:?}"))
+            .1
+            .is_some()
+    };
+    assert!(animated(2), "the region grows: {frames:?}");
+    assert!(animated(4), "what follows it moves along");
+    assert!(animated(6), "and the board after it");
+    assert!(
+        !animated(8),
+        "the board's row changed in the same commit, at once: {frames:?}"
+    );
+}
+
+#[test]
+fn a_layout_animation_on_the_root_still_animates_every_frame() {
+    let frames = scoped_layout_commit(true);
+    assert!(
+        frames
+            .iter()
+            .all(|f| f.1 == crate::LayoutAnimation::EASE_IN_EASE_OUT.update),
+        "{frames:?}"
+    );
+}
+
 #[test]
 fn view_props_and_gestures_reach_the_platform() {
     let mut c = core();
@@ -6440,17 +6519,65 @@ fn refused_urls_fail_and_send_nothing() {
             (3, None)
         ]
     );
-    assert!(
-        !batch
-            .items
-            .iter()
-            .any(|i| matches!(i, MountItem::Command { .. }))
-    );
+    // (The tokens `core()` set go to the platform as ever.)
+    assert!(!batch.items.iter().any(|i| matches!(
+        i,
+        MountItem::Command { command, .. } if !matches!(command, Command::Tokens(_))
+    )));
     let events = js_events(&mut c);
-    assert!(matches!(
-        &events[..],
-        [(3, EventKind::Error, EventPayload::Error { message })] if message.contains("`tracker.io`")
-    ));
+    let [(3, EventKind::Error, EventPayload::Map(fields))] = &events[..] else {
+        panic!("expected the refused image's error: {events:?}");
+    };
+    let field = |key| fields.iter().find(|(k, _)| *k == key).map(|(_, v)| v);
+    assert!(
+        matches!(field("message"), Some(crate::PayloadValue::Str(m)) if m.contains("`tracker.io`"))
+    );
+    assert_eq!(
+        field("code"),
+        Some(&crate::PayloadValue::Str("ERR_ACCESS_DENIED".into()))
+    );
+}
+
+#[test]
+fn refused_web_view_html_fails() {
+    let mut c = core();
+    c.set_access(Arc::new(crate::access::Access {
+        declared: crate::access::Capabilities::from_json(&serde_json::json!({})).unwrap(),
+        granted: None,
+    }));
+    apply(
+        &mut c,
+        vec![
+            Op::Create {
+                id: 2,
+                tag: Tag::WebView,
+            },
+            Op::Listen {
+                id: 2,
+                event: EventKind::Error,
+                enabled: true,
+            },
+            Op::SetProp {
+                id: 2,
+                prop: Prop::Native(NativeProp::Html(Some("<b>hi</b>".into()))),
+            },
+            Op::Insert {
+                parent: ROOT_ID,
+                child: 2,
+                before: None,
+            },
+        ],
+    );
+    c.commit().unwrap();
+    let events = js_events(&mut c);
+    let [(2, EventKind::Error, EventPayload::Map(fields))] = &events[..] else {
+        panic!("expected the refused web view's error: {events:?}");
+    };
+    assert!(
+        fields.iter().any(
+            |(k, v)| *k == "code" && *v == crate::PayloadValue::Str("ERR_ACCESS_DENIED".into())
+        )
+    );
 }
 
 mod components {
@@ -10877,6 +11004,173 @@ mod painter {
                 .is_none_or(|e| e.background_images.is_empty())
         );
     }
+    /// An icon stroked with `currentColor`, 24 points with a 12 point
+    /// view box.
+    #[cfg(feature = "svg")]
+    const ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 12 12"><path d="M0 0h12v12H0z" fill="none" stroke="currentColor"/></svg>"##;
+
+    /// SVGs in a view of a text color: one at its natural size, one given
+    /// only a width.
+    #[cfg(feature = "svg")]
+    #[component]
+    fn Icons() -> impl IntoElement {
+        view()
+            .items_start()
+            .text_color(rgb(0x00ff00))
+            .child(svg(crate::element::ImageSrc::svg_markup(ICON)))
+            .child(svg(crate::element::ImageSrc::svg_markup(ICON)).w(px(48.0)))
+            .child(svg(crate::element::ImageSrc::svg_markup(ICON)).w(relative(0.25)))
+    }
+
+    /// An SVG file, read by the shared loader.
+    #[cfg(feature = "svg")]
+    #[component]
+    fn FileIcon() -> impl IntoElement {
+        let path = std::env::temp_dir().join(format!("nsh-svg-icon-{}.svg", std::process::id()));
+        view()
+            .items_start()
+            .child(svg(path.to_string_lossy().into_owned()))
+    }
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn svg_files_load_off_the_engine_thread_and_lay_out_when_drawn() {
+        let path = std::env::temp_dir().join(format!("nsh-svg-icon-{}.svg", std::process::id()));
+        std::fs::write(&path, ICON).unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_time()
+            .build()
+            .unwrap();
+        let mut c = core();
+        c.set_task_runtime(runtime.handle().clone());
+        c.mount_root(&crate::element::Root::new::<FileIcon>(|| ()));
+        let first = c.commit().unwrap();
+        assert!(
+            !first
+                .items
+                .iter()
+                .any(|i| matches!(i, MountItem::Canvas { drawing, .. } if !drawing.ops.is_empty())),
+            "nothing to draw before it loads"
+        );
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let (id, batch) = loop {
+            assert!(std::time::Instant::now() < end, "never drawn");
+            c.run_component_tasks();
+            if let Some(batch) = c.commit()
+                && let Some(id) = batch.items.iter().find_map(|i| match i {
+                    MountItem::Canvas { id, drawing } if !drawing.ops.is_empty() => Some(*id),
+                    _ => None,
+                })
+            {
+                break (id, batch);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        };
+        // Drawn, it lays out at its natural size.
+        assert_eq!(frame_of(&batch, id).unwrap().size, size(px(24.0), px(24.0)));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn svgs_lay_out_as_images_and_stroke_with_the_text_color() {
+        let mut c = core();
+        c.mount_root(&crate::element::Root::new::<Icons>(|| ()));
+        let batch = c.commit().unwrap();
+        let drawings: Vec<_> = batch
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::Canvas { id, drawing } => Some((*id, drawing.clone())),
+                _ => None,
+            })
+            .collect();
+        // Each sent once, after the layout.
+        let [(natural, small), (wide, large), (quarter, _)] = &drawings[..] else {
+            panic!("{drawings:?}")
+        };
+        let size_of = |id| frame_of(&batch, id).unwrap().size;
+        assert_eq!(size_of(*natural), size(px(24.0), px(24.0)));
+        assert_eq!(size_of(*wide), size(px(48.0), px(48.0)));
+        // The view box onto the box: 2 and 4 times.
+        let scale = |d: &crate::canvas::Drawing| match d.ops[0] {
+            CanvasOp::Transform([Num::Const(a), _, _, Num::Const(d), ..]) => (a, d),
+            ref op => panic!("{op:?}"),
+        };
+        assert_eq!(scale(small), (2.0, 2.0));
+        assert_eq!(scale(large), (4.0, 4.0));
+        let green = crate::style::Color(0x00ff_00ff);
+        assert!(
+            small
+                .ops
+                .contains(&CanvasOp::StrokeStyle(Paint::Color(green)))
+        );
+        assert!(small.view_paints.is_empty());
+        // Given another size by the layout, it is sent again for it.
+        c.set_viewport(size(px(192.0), px(480.0)));
+        let batch = c.commit().unwrap();
+        let resized: Vec<_> = batch
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::Canvas { id, drawing } => Some((*id, drawing.clone())),
+                _ => None,
+            })
+            .collect();
+        let [(id, drawing)] = &resized[..] else {
+            panic!("{resized:?}")
+        };
+        assert_eq!(id, quarter);
+        assert_eq!(scale(drawing), (4.0, 4.0));
+    }
+
+    /// An app that sets its own design tokens while it runs.
+    #[component]
+    fn Themed() -> impl IntoElement {
+        let mut tokens = crate::element::Tokens::default();
+        tokens.set_color("popover", AdaptiveColor::rgb(0xffffff, 0x18181b));
+        set_tokens(tokens);
+        view()
+    }
+
+    /// Tokens an app sets reach what reads them and the platform, which
+    /// colors its own controls with them; tokens that did not change send
+    /// nothing.
+    #[test]
+    fn app_tokens_reach_the_platform() {
+        let mut c = core();
+        c.mount_root(&crate::element::Root::new::<Themed>(|| ()));
+        let mut sent = Vec::new();
+        while let Some(batch) = c.commit() {
+            sent.extend(batch.items.into_iter().filter_map(|i| match i {
+                MountItem::Command {
+                    id: crate::ROOT_ID,
+                    command: Command::Tokens(tokens),
+                } => Some(tokens),
+                _ => None,
+            }));
+        }
+        // The sample tokens `core()` set, then the app's.
+        let [_, tokens] = &sent[..] else {
+            panic!("{sent:?}")
+        };
+        assert_eq!(
+            tokens.color("popover"),
+            Some(AdaptiveColor::rgb(0xffffff, 0x18181b))
+        );
+        assert_eq!(c.tokens(), tokens);
+        let same = (**tokens).clone();
+        c.set_tokens(same);
+        assert!(c.commit().is_none_or(|b| !b.items.iter().any(|i| matches!(
+            i,
+            MountItem::Command {
+                command: Command::Tokens(_),
+                ..
+            }
+        ))));
+    }
+
     /// A canvas that has drawn nothing and records an empty drawing (a
     /// component's canvas before its first layout) sends nothing; one
     /// that has drawn sends what it draws.

@@ -90,7 +90,7 @@ pub(crate) enum Action {
     HostCall {
         name: String,
         args: crate::JsonValue,
-        answer: AnswerSlot<Result<crate::JsonValue, String>>,
+        answer: AnswerSlot<Result<crate::JsonValue, super::JsError>>,
     },
     /// Drops the slots of the host calls whose answers are gone (they
     /// timed out).
@@ -128,6 +128,8 @@ pub(crate) enum Action {
     Frame(AnswerSlot<Instant>),
     /// Sets the app's appearance.
     Appearance(crate::platform::Appearance),
+    /// Sets the app's design tokens.
+    Tokens(super::Tokens),
     /// Draws the scroll views' bars with the built-in bar the source makes
     /// of the theme, or (no theme) with the platform's indicator.
     BuiltInScrollbars(super::ScrollbarSource, Option<super::AnyValue>),
