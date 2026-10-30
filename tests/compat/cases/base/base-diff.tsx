@@ -17,7 +17,10 @@
 // shows each under the app's header (`renderFileHeader`, told the file),
 // which collapses it through the ref (`toggleFile`), reported
 // (`onFileToggle`); the ref lists the files (`files`), whose changes
-// count across them.
+// count across them. A longer diff reports where its rows are scrolled
+// (`onScroll`), the ref gives where each change is in them (`hunkBounds`)
+// and scrolls them to an offset (`setScrollOffset`): an overview ruler's
+// parts.
 import { Text, View, signal } from "nsh";
 import { DiffView, type DiffViewRef } from "nsh/base";
 
@@ -52,6 +55,10 @@ new file mode 100644
 +gamma
 `;
 
+const LINES = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`);
+const RULER_OLD = `${LINES.join("\n")}\n`;
+const RULER_NEW = `${LINES.map((l, i) => (i === 4 ? "line FIVE" : i === 24 ? "line TWENTY-FIVE" : l)).join("\n")}\n`;
+
 export default function BaseDiff() {
   const oldValue = signal(OLD);
   const newValue = signal(NEW);
@@ -65,6 +72,15 @@ export default function BaseDiff() {
   let files!: DiffViewRef;
   const listed = signal("none");
   const toggled = signal("none");
+  let ruler!: DiffViewRef;
+  const scrolled = signal("none");
+  const marks = signal("none");
+  const mark = async () => {
+    const all = (await ruler.hunkBounds()).map(
+      ({ index, bounds: b }) => `${index}@${b.origin.x},${b.origin.y} ${b.size.width}x${b.size.height}`,
+    );
+    marks.set(all.join(" "));
+  };
   const list = async () => {
     const all = (await files.files()).map(f => `${f.path}@${f.firstHunk}`);
     const hunks = (await files.hunks()).map(h => `${h.index}:${h.file}`);
@@ -166,6 +182,22 @@ export default function BaseDiff() {
       <Text>{() => `Files: ${listed()}`}</Text>
       <Text>{() => `Toggled: ${toggled()}`}</Text>
       <View testID="files" style={{ height: 20 }} onPress={list} />
+      <View style={{ width: 390, height: 100 }}>
+        <DiffView
+          ref={r => (ruler = r)}
+          oldValue={RULER_OLD}
+          newValue={RULER_NEW}
+          expandAll
+          onScroll={({ offset, contentSize, size }) =>
+            scrolled.set(`${offset.x} ${offset.y} ${contentSize.width}x${contentSize.height} ${size.width}x${size.height}`)
+          }
+          style={{ flex: 1 }}
+        />
+      </View>
+      <Text>{() => `Scrolled: ${scrolled()}`}</Text>
+      <Text>{() => `Marks: ${marks()}`}</Text>
+      <View testID="marks" style={{ height: 20 }} onPress={mark} />
+      <View testID="scroll-to" style={{ height: 20 }} onPress={() => ruler.setScrollOffset({ x: 0, y: 470 })} />
     </View>
   );
 }
