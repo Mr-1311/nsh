@@ -298,12 +298,13 @@ view is laid out and again whenever one of them changes: as the rows scroll, whe
 change height (other texts, `layout`, `softWrap`, a file or a separator expanded or collapsed, an annotation laid out).
 `hunkBounds()` gives where each change is in the rows (`DiffHunkBounds`: `{ index, bounds }`, `bounds` from the top
 of its first row to the bottom of its last, with the annotations under them, across the view), the changes that show:
-a collapsed file's have no rows. `setScrollOffset({ x, y })` scrolls the rows to `y` at once, so a dragged thumb
-follows the pointer in the same frame.
+a collapsed file's have no rows. `onHunkBoundsChange({ hunkBounds })` gives the same list once the view is laid out and
+again whenever a change moves or changes size, even when the rows keep their height (one changed line becoming
+another): a ruler draws its marks from it rather than reading them on `onScroll`. `setScrollOffset({ x, y })` scrolls
+the rows to `y` at once, so a dragged thumb follows the pointer in the same frame.
 
 Together they make an overview ruler beside the view, as code editors have: a mark for each change, a thumb over the
-rows in view, and a press or a drag that scrolls there. Here the ruler is as tall as the view, and the marks are
-read again when the rows change height:
+rows in view, and a press or a drag that scrolls there. Here the ruler is as tall as the view:
 
 ```tsx
 import { Each, signal, View, type ViewRef } from "nsh";
@@ -324,10 +325,8 @@ const follow = (pageY: number) => diff.setScrollOffset({ x: 0, y: (pageY - ruler
     ref={diff}
     oldValue={before()}
     newValue={after()}
-    onScroll={({ offset, contentSize, size }) => {
-      if (contentSize.height !== rows().height) diff.hunkBounds().then((list) => marks.set(list));
-      rows.set({ y: offset.y, height: contentSize.height, view: size.height });
-    }}
+    onScroll={({ offset, contentSize, size }) => rows.set({ y: offset.y, height: contentSize.height, view: size.height })}
+    onHunkBoundsChange={({ hunkBounds }) => marks.set(hunkBounds)}
     class="flex-1"
   />
   <View
@@ -478,6 +477,7 @@ set with `fontFamily`, `fontSize` and `lineHeight`.
 | `onStatsChange` | `.on_stats_change(\|stats: &DiffStats\| ..)` | The counts changed: `{ stats }`, a `{ added, deleted, hunks }`. It fires once when the view is made and again each time the texts are diffed to other counts, for a "+8 −8 · 5 changes" line. |
 | `onFileToggle` | `.on_file_toggle(\|file: &DiffFile\| ..)` | A file of the patch was collapsed or expanded (its header, or the ref): `{ file }`, the `DiffFile` now. |
 | `onScroll` | `.on_scroll(\|e: &DiffViewEvent\| ..)` | The rows scrolled, or they or the viewport changed size: `{ offset, contentSize, size }`, as a `Scroll`'s (`DiffViewEvent::Scroll(offset, content_size, size)` in Rust). It fires once the view is laid out and again when one of them changes. |
+| `onHunkBoundsChange` | `.on_hunk_bounds_change(\|bounds: &Vec<DiffHunkBounds>\| ..)` | Where the changes are in the rows changed: `{ hunkBounds }`, the list `hunkBounds()` gives. It fires once the view is laid out and again when a change moves or changes size, the rows' height kept or not, for an overview ruler's marks. |
 
 ## Related
 

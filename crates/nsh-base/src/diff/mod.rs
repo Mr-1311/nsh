@@ -361,6 +361,13 @@ pub enum DiffViewEvent {
     /// viewport: `offset.x` is 0.
     #[args(offset, content_size, size)]
     Scroll(Point<Points>, Size<Points>, Size<Points>),
+    /// Where the changes are in the rows (`hunkBounds()`'s list) changed:
+    /// other texts, layout or wrapping, a file or separator expanded or
+    /// collapsed, an annotation laid out or a resize moved or resized one,
+    /// even when the rows kept their height (first once the view is laid
+    /// out). An overview ruler redraws its marks from it.
+    #[args(hunk_bounds)]
+    HunkBoundsChange(Vec<DiffHunkBounds>),
 }
 
 /// The methods of a [`DiffView`]'s ref.

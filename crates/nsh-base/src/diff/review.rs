@@ -525,6 +525,34 @@ impl Dv {
         });
     }
 
+    /// Reports where the changes are (`onHunkBoundsChange`) once the view
+    /// is laid out, and again whenever a relayout or a new width moves or
+    /// resizes one: the rows can keep their height while a change moves
+    /// (one changed line becoming another), which `onScroll` cannot tell.
+    pub(crate) fn report_hunk_bounds(&self) {
+        let viewport = self.viewport;
+        // A new height alone moves no change: only the width is read.
+        let width = computed(move || viewport.get().width);
+        let dv = self.clone();
+        effect(move || {
+            dv.rev.get();
+            dv.geo.get();
+            let width = width.get();
+            if viewport.get_untracked() == Size::default() {
+                return;
+            }
+            let now = {
+                let st = dv.st.borrow();
+                hunk_bounds(&st.rows, &st.geometry, width)
+            };
+            if dv.bounds_reported.borrow().as_ref() == Some(&now) {
+                return;
+            }
+            *dv.bounds_reported.borrow_mut() = Some(now.clone());
+            dv.emit(DiffViewEvent::HunkBoundsChange(now));
+        });
+    }
+
     /// Scrolls `y` to the top of the view (as far as the rows go) at once.
     pub(crate) fn set_scroll_offset(&self, y: Points) {
         let max = {

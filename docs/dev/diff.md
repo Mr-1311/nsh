@@ -10,7 +10,7 @@ user-facing page is `website/elements/diff-view.md`; how each module works insid
 
 | File | What |
 |---|---|
-| `mod.rs` | The component: `DiffViewProps`, `DiffViewEvent` (`Change`, `LineNumberPress`, `StatsChange`, `LineSelectionChange`, `FileToggle`, `Scroll`), `DiffViewApi` (the ref's methods); the values: `DiffLayout`, `DiffInline`, `DiffIndicators`, `DiffSide`, `DiffExpand`, `DiffFileStatus` (`PropEnum`s), `DiffHunk`, `DiffHunkBounds`, `DiffStats`, `DiffSeparator`, `DiffChange`, `DiffLine`, `DiffLineRange`, `DiffAnnotation`, `DiffFile` (`JsObject`s) |
+| `mod.rs` | The component: `DiffViewProps`, `DiffViewEvent` (`Change`, `LineNumberPress`, `StatsChange`, `LineSelectionChange`, `FileToggle`, `Scroll`, `HunkBoundsChange`), `DiffViewApi` (the ref's methods); the values: `DiffLayout`, `DiffInline`, `DiffIndicators`, `DiffSide`, `DiffExpand`, `DiffFileStatus` (`PropEnum`s), `DiffHunk`, `DiffHunkBounds`, `DiffStats`, `DiffSeparator`, `DiffChange`, `DiffLine`, `DiffLineRange`, `DiffAnnotation`, `DiffFile` (`JsObject`s) |
 | `parts.rs` | The parts the app styles: one `parts!` list makes `DiffViewClasses`, `DiffViewStyles` (each a `PartStyle`) and `DiffViewPart` |
 | `model.rs` | `DiffModel`: the line diff and its hunks, the pairs of changed lines that are alike, the words changed within a pair, reverting and accepting one hunk |
 | `layout.rs` | `rows`: the rows a diff shows (`Row::Line`, `Row::Separator`; `Row::File`, a file header, made by `files.rs`), `Expansions` (what the user expanded of each gap), patch hunk headers |
@@ -134,9 +134,12 @@ relayout reach it, and emits only when the three differ from those reported last
 it the viewport is unknown). A component cannot tell whether the app listens to one of its events, so it is emitted
 either way: one event per frame the view scrolls, as the core's `onScroll` is for a listener. `hunkBounds()` is
 `hunk_spans` (each change's rows, placed by `Geometry`: wrapped lines and annotations count, and a collapsed file's
-changes have no rows) as `Bounds` across the viewport. `setScrollOffset` sets `scroll_y` and scrolls the view without
-an animation, clamped to the rows, for a thumb that follows the pointer (`goToHunk` and `scrollToFile`, discrete
-jumps, animate).
+changes have no rows) as `Bounds` across the viewport. `onHunkBoundsChange` reports the same list from a second effect
+(`report_hunk_bounds`), which follows `rev`, `geo` and the viewport's width (a memo, so a new height alone does not
+recompute it) and emits when the list differs from the one reported last: a change can move while the rows keep
+their height (one changed line becoming another), which `onScroll`'s values cannot show. `setScrollOffset` sets
+`scroll_y` and scrolls the view without an animation, clamped to the rows, for a thumb that follows the pointer
+(`goToHunk` and `scrollToFile`, discrete jumps, animate).
 
 `onStatsChange` reports `{ stats }`, a `DiffStats` (`{ added, deleted, hunks }`), once when the view is made and again whenever the
 texts are diffed to counts other than those reported last (new props, a hunk kept or reverted), so an app's "+8 −8 ·

@@ -10,8 +10,8 @@
 //! scrolls to an offset, as an overview ruler needs.
 
 use nsh_base::{
-    DiffAnnotation, DiffChange, DiffExpand, DiffFile, DiffHunk, DiffLayout, DiffLineRange,
-    DiffSide, DiffView, DiffViewApi, DiffViewEvent, diff_view,
+    DiffAnnotation, DiffChange, DiffExpand, DiffFile, DiffHunk, DiffHunkBounds, DiffLayout,
+    DiffLineRange, DiffSide, DiffView, DiffViewApi, DiffViewEvent, diff_view,
 };
 use nsh_core::{
     Size,
@@ -104,6 +104,8 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
     let scrolled = signal(String::from("-"));
     let scrolls = signal(0u32);
     let marks = signal(String::from("-"));
+    let moved = signal(String::from("-"));
+    let moves = signal(0u32);
     let height = signal(px(400.0));
     let dv = component_ref::<DiffView>();
     let api = move |f: &dyn Fn(&DiffViewApi)| {
@@ -141,6 +143,10 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
                 ));
                 scrolls.update(|n| *n += 1);
             }
+        })
+        .on_hunk_bounds_change(move |list: &Vec<DiffHunkBounds>| {
+            moved.set(marks_text(list));
+            moves.update(|n| *n += 1);
         })
         .component_ref(&dv)
         .size_full();
@@ -180,6 +186,8 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
         .child(text(move || format!("Scrolled {}", scrolled.get())))
         .child(text(move || format!("Scrolls {}", scrolls.get())))
         .child(text(move || format!("Marks {}", marks.get())))
+        .child(text(move || format!("Moved {}", moved.get())))
+        .child(text(move || format!("Moves {}", moves.get())))
         .child(
             view()
                 .flex_row()
@@ -242,23 +250,17 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
                 ))
                 .child(button(
                     "marks",
-                    Box::new(move |a| {
-                        let list: Vec<String> = a
-                            .hunk_bounds()
-                            .iter()
-                            .map(|m| {
-                                let b = m.bounds;
-                                format!(
-                                    "{}@{},{}+{}x{}",
-                                    m.index,
-                                    b.origin.x.0,
-                                    b.origin.y.0,
-                                    b.size.width.0,
-                                    b.size.height.0
-                                )
-                            })
-                            .collect();
-                        marks.set(list.join(" "));
+                    Box::new(move |a| marks.set(marks_text(&a.hunk_bounds()))),
+                ))
+                // The change moves from the first line to the last: the
+                // rows keep their height.
+                .child(button(
+                    "relocate",
+                    Box::new(move |_| {
+                        batch(|| {
+                            old.set("a\nb\nc\nd".into());
+                            new.set("a\nb\nc\nD".into());
+                        })
                     }),
                 ))
                 .child(button(
@@ -661,6 +663,20 @@ fn two_far_changes() -> HarnessProps {
     texts(&old.join("\n"), &new.join("\n"))
 }
 
+/// The changes' boxes as text: `index@x,y+widthxheight` each.
+fn marks_text(list: &[DiffHunkBounds]) -> String {
+    list.iter()
+        .map(|m| {
+            let b = m.bounds;
+            format!(
+                "{}@{},{}+{}x{}",
+                m.index, b.origin.x.0, b.origin.y.0, b.size.width.0, b.size.height.0
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// How many times the view reported its scrolling.
 fn scrolls(app: &Headless) -> u32 {
     app.screen()
@@ -797,4 +813,41 @@ diff --git a/b.rs b/b.rs
     assert_eq!(one.len(), 1, "{one:?}");
     assert_eq!(one[0].0, 1);
     assert!(one[0].1 <= second.1 - first.2, "{one:?} after {both:?}");
+}
+
+/// How many times the view reported where its changes are.
+fn moves(app: &Headless) -> u32 {
+    app.screen()
+        .texts()
+        .iter()
+        .find_map(|t| t.trim().strip_prefix("Moves "))
+        .expect("the count shows")
+        .parse()
+        .unwrap()
+}
+
+#[test]
+fn the_view_reports_a_change_moved_within_rows_of_the_same_height() {
+    let mut app = start(texts("A\nb\nc\nd", "a\nb\nc\nd"));
+    // Once laid out: the change is the first row, of the four (split:
+    // the changed line beside its old one).
+    see(&mut app, "Moved 0@0,0+800x20");
+    see(&mut app, "Scrolled 0 0 800 80 400");
+    let scrolls_before = scrolls(&app);
+    // The change moves to the last line: the rows keep their height, so
+    // `onScroll` has nothing to report, and the moved change is reported.
+    app.press("id:relocate").unwrap();
+    see(&mut app, "Moved 0@0,60+800x20");
+    app.wait(std::time::Duration::from_millis(100)).unwrap();
+    assert_eq!(scrolls(&app), scrolls_before);
+    // What the ref gives agrees.
+    app.press("id:marks").unwrap();
+    see(&mut app, "Marks 0@0,60+800x20");
+    // Nothing moved: nothing more is reported, a new viewport height
+    // included.
+    let before = moves(&app);
+    app.press("id:shrink").unwrap();
+    see(&mut app, "Scrolled 0 0 800 80 300");
+    app.wait(std::time::Duration::from_millis(100)).unwrap();
+    assert_eq!(moves(&app), before);
 }
