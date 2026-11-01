@@ -498,6 +498,12 @@ impl DiffViewApi {
         self.dv.hunk_bounds()
     }
 
+    /// How far the rows are scrolled down (`x` is always 0: each side
+    /// scrolls horizontally on its own).
+    pub fn scroll_offset(&self) -> Point<Points> {
+        self.dv.scroll_offset()
+    }
+
     /// Scrolls the rows to `offset.y` (as far as they go) at once, as a
     /// scroll bar's thumb dragged by the pointer follows it; the sides keep
     /// their horizontal scroll (`offset.x` is ignored).

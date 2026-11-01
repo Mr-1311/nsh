@@ -132,7 +132,8 @@ one at the top of the view, else the first starting in view.
 `viewport` and the rows' height (`rows_height`, which follows `rev` and `geo`), so a scroll, a resize and every
 relayout reach it, and emits only when the three differ from those reported last, from the first layout on (before
 it the viewport is unknown). A component cannot tell whether the app listens to one of its events, so it is emitted
-either way: one event per frame the view scrolls, as the core's `onScroll` is for a listener. `hunkBounds()` is
+either way, one per frame the view scrolls; the JS side drops an event its host has no `on<Event>` handler for before
+converting its data (`nsh-js` `components.rs`, `Components::handled`). `scrollOffset()` reads `scroll_y`. `hunkBounds()` is
 `hunk_spans` (each change's rows, placed by `Geometry`: wrapped lines and annotations count, and a collapsed file's
 changes have no rows) as `Bounds` across the viewport. `onHunkBoundsChange` reports the same list from a second effect
 (`report_hunk_bounds`), which follows `rev`, `geo` and the viewport's width (a memo, so a new height alone does not

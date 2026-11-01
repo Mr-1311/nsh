@@ -3222,6 +3222,8 @@ expect Marks: 0@0,80 390x20 1@0,480 390x20
 # The ref scrolls them to an offset, reported.
 tap id:scroll-to
 expect Scrolled: 0 470 390x600 390x100
+tap id:read-offset
+expect Offset: 0 470
 expect line TWENTY-FIVE
 covers [props] DiffView.softWrap
 covers [props] DiffView.annotations

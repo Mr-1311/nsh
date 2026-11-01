@@ -20,7 +20,8 @@
 // count across them. A longer diff reports where its rows are scrolled
 // (`onScroll`) and where each change is in them (`onHunkBoundsChange`,
 // as the ref's `hunkBounds` gives it), and the ref scrolls them to an
-// offset (`setScrollOffset`): an overview ruler's parts.
+// offset (`setScrollOffset`) and reads it (`scrollOffset`): an overview
+// ruler's parts.
 import { Text, View, signal } from "nsh";
 import { DiffView, type DiffHunkBounds, type DiffViewRef } from "nsh/base";
 
@@ -76,6 +77,7 @@ export default function BaseDiff() {
   const scrolled = signal("none");
   const marks = signal("none");
   const moved = signal("none");
+  const offset = signal("none");
   const boxes = (list: DiffHunkBounds[]) =>
     list.map(({ index, bounds: b }) => `${index}@${b.origin.x},${b.origin.y} ${b.size.width}x${b.size.height}`).join(" ");
   const mark = async () => marks.set(boxes(await ruler.hunkBounds()));
@@ -196,8 +198,17 @@ export default function BaseDiff() {
       <Text>{() => `Scrolled: ${scrolled()}`}</Text>
       <Text>{() => `Marks: ${marks()}`}</Text>
       <Text>{() => `Moved: ${moved()}`}</Text>
+      <Text>{() => `Offset: ${offset()}`}</Text>
       <View testID="marks" style={{ height: 20 }} onPress={mark} />
       <View testID="scroll-to" style={{ height: 20 }} onPress={() => ruler.setScrollOffset({ x: 0, y: 470 })} />
+      <View
+        testID="read-offset"
+        style={{ height: 20 }}
+        onPress={async () => {
+          const { x, y } = await ruler.scrollOffset();
+          offset.set(`${x} ${y}`);
+        }}
+      />
     </View>
   );
 }

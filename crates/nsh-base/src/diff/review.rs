@@ -511,6 +511,7 @@ impl Dv {
     /// whenever one of them changes.
     pub(crate) fn report_scroll(&self) {
         let dv = self.clone();
+        let reported = std::cell::Cell::<Option<Scrolled>>::new(None);
         effect(move || {
             let offset = point(px(0.0), dv.scroll_y.get());
             let viewport = dv.viewport.get();
@@ -519,7 +520,7 @@ impl Dv {
                 return;
             }
             let now = (offset, content, viewport);
-            if dv.scroll_reported.replace(Some(now)) != Some(now) {
+            if reported.replace(Some(now)) != Some(now) {
                 dv.emit(DiffViewEvent::Scroll(offset, content, viewport));
             }
         });
@@ -534,6 +535,7 @@ impl Dv {
         // A new height alone moves no change: only the width is read.
         let width = computed(move || viewport.get().width);
         let dv = self.clone();
+        let reported = std::cell::RefCell::<Option<Vec<DiffHunkBounds>>>::new(None);
         effect(move || {
             dv.rev.get();
             dv.geo.get();
@@ -545,10 +547,10 @@ impl Dv {
                 let st = dv.st.borrow();
                 hunk_bounds(&st.rows, &st.geometry, width)
             };
-            if dv.bounds_reported.borrow().as_ref() == Some(&now) {
+            if reported.borrow().as_ref() == Some(&now) {
                 return;
             }
-            *dv.bounds_reported.borrow_mut() = Some(now.clone());
+            *reported.borrow_mut() = Some(now.clone());
             dv.emit(DiffViewEvent::HunkBoundsChange(now));
         });
     }
@@ -563,6 +565,11 @@ impl Dv {
         // The rows in view follow now; the scroll view reports `y` back.
         self.scroll_y.set(y);
         self.vscroll.scroll_to(point(px(0.0), y), false);
+    }
+
+    /// How far the rows are scrolled.
+    pub(crate) fn scroll_offset(&self) -> Point<Points> {
+        point(px(0.0), self.scroll_y.get_untracked())
     }
 
     pub(crate) fn hunk_bounds(&self) -> Vec<DiffHunkBounds> {

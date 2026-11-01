@@ -106,6 +106,7 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
     let marks = signal(String::from("-"));
     let moved = signal(String::from("-"));
     let moves = signal(0u32);
+    let offset = signal(String::from("-"));
     let height = signal(px(400.0));
     let dv = component_ref::<DiffView>();
     let api = move |f: &dyn Fn(&DiffViewApi)| {
@@ -184,6 +185,7 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
         .child(text(move || format!("Files {}", files.get())))
         .child(text(move || format!("Toggled {}", toggled.get())))
         .child(text(move || format!("Scrolled {}", scrolled.get())))
+        .child(text(move || format!("Offset {}", offset.get())))
         .child(text(move || format!("Scrolls {}", scrolls.get())))
         .child(text(move || format!("Marks {}", marks.get())))
         .child(text(move || format!("Moved {}", moved.get())))
@@ -266,6 +268,13 @@ fn Harness(props: HarnessProps) -> impl IntoElement {
                 .child(button(
                     "scroll-40",
                     Box::new(|a| a.set_scroll_offset(point(px(500.0), px(40.0)))),
+                ))
+                .child(button(
+                    "read-offset",
+                    Box::new(move |a| {
+                        let o = a.scroll_offset();
+                        offset.set(format!("{} {}", o.x.0, o.y.0));
+                    }),
                 ))
                 .child(button(
                     "scroll-far",
@@ -758,6 +767,9 @@ fn the_ref_scrolls_to_an_offset_at_once() {
     see(&mut app, "Scrolled 0 40 800 1200 400");
     app.wait(std::time::Duration::from_millis(100)).unwrap();
     assert_eq!(scrolls(&app), before + 1);
+    // The ref reads it back.
+    app.press("id:read-offset").unwrap();
+    see(&mut app, "Offset 0 40");
     // As far as the rows go: their height less the viewport's.
     app.press("id:scroll-far").unwrap();
     see(&mut app, "Scrolled 0 800 800 1200 400");

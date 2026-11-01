@@ -269,6 +269,7 @@ changes nothing and logs a warning naming the method and the value.
 | `expandFile(path)` | Shows the lines of the file at `path` again. |
 | `toggleFile(path)` | Collapses the file at `path`, or expands it when collapsed. |
 | `hunkBounds()` | `Promise<DiffHunkBounds[]>`: where each change is in the rows, in order ([An overview ruler](#an-overview-ruler)). |
+| `scrollOffset()` | `Promise<Point>`: how far the rows are scrolled (`x` is 0). |
 | `setScrollOffset(offset)` | Scrolls the rows to `offset.y` at once, as far as they go, as a thumb follows the pointer that drags it. |
 
 `nextHunk()` and `previousHunk()` go on from the change they went to while the view stays there, and otherwise from
@@ -300,13 +301,93 @@ change height (other texts, `layout`, `softWrap`, a file or a separator expanded
 of its first row to the bottom of its last, with the annotations under them, across the view), the changes that show:
 a collapsed file's have no rows. `onHunkBoundsChange({ hunkBounds })` gives the same list once the view is laid out and
 again whenever a change moves or changes size, even when the rows keep their height (one changed line becoming
-another): a ruler draws its marks from it rather than reading them on `onScroll`. `setScrollOffset({ x, y })` scrolls
-the rows to `y` at once, so a dragged thumb follows the pointer in the same frame.
+another): a ruler draws its marks from it rather than reading them on `onScroll`. `scrollOffset()` reads how far the rows are scrolled,
+and `setScrollOffset({ x, y })` scrolls the rows to `y` at once, so a dragged thumb follows the pointer in the same frame.
 
 Together they make an overview ruler beside the view, as code editors have: a mark for each change, a thumb over the
 rows in view, and a press or a drag that scrolls there. Here the ruler is as tall as the view:
 
-```tsx
+```rust tabs
+use nsh_base::{DiffHunkBounds, DiffView, DiffViewApi, DiffViewEvent, diff_view, theme};
+use nsh_core::prelude::*;
+
+fn review(old: SharedString, new: SharedString) -> impl IntoElement {
+    let diff = component_ref::<DiffView>();
+    let ruler = element_ref();
+    let ruler_top = stored(px(0.0));
+    // How far the rows are scrolled, their height and the viewport's.
+    let rows = signal((px(0.0), px(0.0), px(0.0)));
+    let marks = signal(Vec::<DiffHunkBounds>::new());
+    // Points of the rows per point of the ruler.
+    let scale = move || {
+        let (_, height, view) = rows.get();
+        height.max(px(1.0)) / view.max(px(1.0))
+    };
+    // The thumb's middle at the pointer.
+    let follow = move |page_y: Points| {
+        let view = rows.get_untracked().2;
+        let y = (page_y - ruler_top.get()) * scale() - view / 2.0;
+        if let Some(api) = diff.api::<DiffViewApi>() {
+            api.set_scroll_offset(point(px(0.0), y));
+        }
+    };
+    view()
+        .flex_1()
+        .flex_row()
+        .child(
+            diff_view()
+                .old_value(old)
+                .new_value(new)
+                .on_scroll(move |e: &DiffViewEvent| {
+                    if let DiffViewEvent::Scroll(offset, content, size) = e {
+                        rows.set((offset.y, content.height, size.height));
+                    }
+                })
+                .on_hunk_bounds_change(move |list: &Vec<DiffHunkBounds>| marks.set(list.clone()))
+                .component_ref(&diff)
+                .flex_1(),
+        )
+        .child(
+            view()
+                .element_ref(&ruler)
+                .w(px(12.0))
+                .bg(move || theme().muted)
+                .claim_touches(TouchClaim::on_start())
+                .on_responder_grant(move |e: &ResponderEvent| {
+                    let y = e.page.y;
+                    spawn(async move {
+                        ruler_top.replace(ruler.measure().await.map_or(px(0.0), |m| m.page.y));
+                        follow(y);
+                    });
+                })
+                .on_responder_move(move |e: &ResponderEvent| follow(e.page.y))
+                .child(each(
+                    marks,
+                    |mark: &DiffHunkBounds| mark.index,
+                    move |mark, _| {
+                        view()
+                            .absolute()
+                            .left(px(0.0))
+                            .right(px(0.0))
+                            .bg(rgb(0xf59e0b))
+                            .top(move || mark.get().bounds.origin.y / scale())
+                            .h(move || (mark.get().bounds.size.height / scale()).max(px(2.0)))
+                    },
+                ))
+                .child(
+                    view()
+                        .absolute()
+                        .left(px(0.0))
+                        .right(px(0.0))
+                        .bg(move || theme().foreground.opacity(0.2))
+                        .top(move || rows.get().0 / scale())
+                        .h(move || rows.get().2 / scale()),
+                ),
+        )
+}
+```
+
+```tsx tabs
 import { Each, signal, View, type ViewRef } from "nsh";
 import { DiffView, type DiffHunkBounds, type DiffViewRef } from "nsh/base";
 
